@@ -2,8 +2,8 @@
 
 <sup>WARN: 🚧 under construction! 🚧 - this is in active development</sup>
 
-Firmware for the JTAG debug probe built into [Tiliqua](https://github.com/apfelaudio/tiliqua)
-`tiliqua-debug` is currently just a fork of the [pico-dirtyJtag](https://github.com/phdussud/pico-dirtyJtag) project, however it will need its own PID, and will soon add some extra features (e.g. DFU bitstream uploading).
+- Firmware for the JTAG debug probe built into [Tiliqua](https://github.com/apfelaudio/tiliqua).
+- `tiliqua-debug` is currently just a fork of the [pico-dirtyJtag](https://github.com/phdussud/pico-dirtyJtag) project, however it will need its own PID, and will soon add some extra features (e.g. DFU bitstream uploading).
 
 ORIGINAL README FOLLOWS
 
