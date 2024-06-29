@@ -34,6 +34,7 @@
 #include "cmd.h"
 
 #include "heatshrink_encoder.h"
+#include "heatshrink_decoder.h"
 
 
 enum CommandIdentifier {
@@ -66,7 +67,7 @@ enum SignalIdentifier {
   SIG_SRST = 1 << 6
 };
 
-#define CMD_BUFFER_SZ 4*32768
+#define CMD_BUFFER_SZ 3*32768
 static uint8_t cmd_buffer[CMD_BUFFER_SZ];
 static uint32_t cmd_buffer_index = 0;
 static uint32_t cmd_buffer_sunk = 0;
@@ -151,7 +152,8 @@ static void cmd_gotobootloader(void);
 static heatshrink_encoder hse;
 static heatshrink_decoder hsd;
 
-void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host) {
+uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host) {
+
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
 
@@ -185,8 +187,10 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
     switch ((*commands)&0x0F) {
     case CMD_INFO:
     {
-      uint32_t trbytes = cmd_info(output_buffer);
-      output_buffer += trbytes;
+      if (!local_host) {
+          uint32_t trbytes = cmd_info(output_buffer);
+          output_buffer += trbytes;
+      }
       break;
     }
     case CMD_FREQ:
@@ -230,12 +234,13 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
       break;
 
     default:
-      return; /* Unsupported command, halt */
+      return (commands - rxbuf) + 1; /* Unsupported command, halt */
       break;
     }
 
     commands++;
   }
+
   /* Send the transfer response back to host */
   if ((tx_buf != output_buffer) && !local_host)
   {
@@ -243,7 +248,12 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
     tud_vendor_flush();
   }
 
-  return;
+  // Count CMD_STOP as a recieved command.
+  if (*commands == CMD_STOP) {
+      ++commands;
+  }
+
+  return commands - rxbuf;
 }
 
 static const unsigned char base64_table[65] =
@@ -307,20 +317,67 @@ void base64_print(
 }
 
 #define DECOMPRESSION_BUF_SZ 2048
+#define FAKE_TX_BUF_SZ       1024
+#define HANDLE_WATER         128
+#define HANDLE_MAX           64
+
+extern pio_jtag_inst_t jtag;
+
+uint8_t decompression_buf[DECOMPRESSION_BUF_SZ];
+uint8_t fake_tx_buf[FAKE_TX_BUF_SZ];
+
 static void decode() {
+
+    if (cmd_buffer_sunk < 1000) {
+        return;
+    }
+
+    uputs("\n\rattempt decode + writeback ... ");
+
     heatshrink_decoder_reset(&hsd);
     uint32_t compressed_size = cmd_buffer_sunk;
     size_t sunk = 0;
-    size_t polled = 0;
-    uint8_t decompression_buf[DECOMPRESSION_BUF_SZ];
+    size_t bytes_in_decomp = 0;
+    size_t bytes_total_decomp = 0;
+    size_t total_handled = 0;
     while (sunk < compressed_size) {
+
+        // Read from saved command buffer
+        size_t count = 0;
         heatshrink_decoder_sink(&hsd, &cmd_buffer[sunk], compressed_size - sunk, &count);
         sunk += count;
-        size_t decomp_position = polled % (DECOMPRESSION_BUF_SZ/2);
-        pres = heatshrink_decoder_poll(&hsd, &decompression_buf[polled], DECOMPRESSION_BUF_SZ - polled, &count);
-        polled += count;
+
+        // Decompress as much as we can from what we just sunk.
+        HSD_poll_res pres;
+        do {
+            pres = heatshrink_decoder_poll(
+                &hsd, &decompression_buf[bytes_in_decomp], DECOMPRESSION_BUF_SZ - bytes_in_decomp, &count);
+            bytes_in_decomp += count;
+            bytes_total_decomp += count;
+        } while ((pres == HSDR_POLL_MORE) && (bytes_in_decomp < DECOMPRESSION_BUF_SZ));
+
+        // If we have a lot of decompressed commands pending, handle them until it's less than HANDLE_WATER
+        while (bytes_in_decomp >= HANDLE_WATER) {
+            size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], HANDLE_MAX, fake_tx_buf, true);
+            memcpy(decompression_buf, decompression_buf + n_handled, bytes_in_decomp - n_handled);
+            bytes_in_decomp -= n_handled;
+            total_handled += n_handled;
+        }
     }
-    heatshrink_decoder_finish(&hsd)
+    heatshrink_decoder_finish(&hsd);
+
+    while (bytes_in_decomp > 0) {
+        size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], bytes_in_decomp, fake_tx_buf, true);
+        memcpy(decompression_buf, decompression_buf + n_handled, bytes_in_decomp - n_handled);
+        bytes_in_decomp -= n_handled;
+        total_handled += n_handled;
+    }
+
+    uputs("\n\rdecompressed bytes: ");
+    base64_print((uint8_t*)&bytes_total_decomp, 4);
+
+    uputs("\n\rhandled commands: ");
+    base64_print((uint8_t*)&total_handled, 4);
 }
 
 static uint32_t cmd_info(uint8_t *buffer) {
