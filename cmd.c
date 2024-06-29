@@ -33,6 +33,8 @@
 #include "pio_jtag.h"
 #include "cmd.h"
 
+#include "heatshrink_encoder.h"
+
 
 enum CommandIdentifier {
   CMD_STOP = 0x00,
@@ -67,6 +69,9 @@ enum SignalIdentifier {
 #define CMD_BUFFER_SZ 4*32768
 static uint8_t cmd_buffer[CMD_BUFFER_SZ];
 static uint32_t cmd_buffer_index = 0;
+static uint32_t cmd_buffer_sunk = 0;
+static uint32_t cmd_buffer_count = 0;
+static bool hse_init = false;
 
 /**
  * @brief Handle CMD_INFO command
@@ -143,16 +148,41 @@ static void cmd_setvoltage(const uint8_t *commands);
  */
 static void cmd_gotobootloader(void);
 
+static heatshrink_encoder hse;
+
 void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf) {
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
 
+  if (!hse_init) {
+    heatshrink_encoder_reset(&hse);
+    hse_init = true;
+  }
+
   if ((cmd_buffer_index + count) < CMD_BUFFER_SZ) {
+    /*
     memcpy(cmd_buffer + cmd_buffer_index, rxbuf, count);
     cmd_buffer_index += count;
+    */
+
+    size_t n_sunk = 0;
+    size_t total_sunk = 0;
+    size_t n_polled = 0;
+
+    while (total_sunk != count) {
+        heatshrink_encoder_sink(&hse, &rxbuf[total_sunk], count-total_sunk, &n_sunk);
+        total_sunk += n_sunk;
+        cmd_buffer_sunk += n_sunk;
+        heatshrink_encoder_poll(&hse, &cmd_buffer[cmd_buffer_index],
+                                CMD_BUFFER_SZ-cmd_buffer_index, &n_polled);
+        cmd_buffer_index += n_polled;
+    }
+
   } else {
     cmd_buffer_index = (CMD_BUFFER_SZ - 1);
   }
+
+  cmd_buffer_count += count;
 
   while ((commands < (rxbuf + count)) && (*commands != CMD_STOP))
   {
@@ -284,11 +314,26 @@ static uint32_t cmd_info(uint8_t *buffer) {
   char info_string[10] = "DJTAG2\n";
   memcpy(buffer, info_string, 10);
 
+  while(HSER_FINISH_MORE == heatshrink_encoder_finish(&hse)) {
+    size_t n_polled = 0;
+    heatshrink_encoder_poll(&hse, &cmd_buffer[cmd_buffer_index],
+                            CMD_BUFFER_SZ-cmd_buffer_index, &n_polled);
+  }
+
   uputs("\r\n*** START base64 ***\r\n");
   base64_print(cmd_buffer, cmd_buffer_index);
   uputs("\r\n*** END base64 ***\r\n");
+  uputs("\n\rcompressed bytes: ");
   base64_print((uint8_t*)&cmd_buffer_index, 4);
+  uputs("\n\runcompressed bytes: ");
+  base64_print((uint8_t*)&cmd_buffer_sunk, 4);
+  uputs("\n\rcommand bytes: ");
+  base64_print((uint8_t*)&cmd_buffer_count, 4);
+
   cmd_buffer_index = 0;
+  cmd_buffer_sunk = 0;
+  cmd_buffer_count = 0;
+  hse_init = false;
 
   return 10;
 }
