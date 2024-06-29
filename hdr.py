@@ -18,6 +18,9 @@ with open("img.txt", "r") as f:
 content_decoded = base64.b64decode(content_raw)
 print(content_decoded)
 
+with open("out.bin", "wb") as f:
+    f.write(content_decoded)
+
 with open("out.c", "w") as f:
     f.write(f"uint8_t data[{len(content_decoded)}]")
     f.write(" = {\n")

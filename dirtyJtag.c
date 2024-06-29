@@ -126,7 +126,7 @@ void fetch_command()
 #ifndef MULTICORE
     if (buffer_infos[rd_buffer_number].busy)
     {
-        cmd_handle(&jtag, buffer_infos[rd_buffer_number].buffer, buffer_infos[rd_buffer_number].count, tx_buf);
+        cmd_handle(&jtag, buffer_infos[rd_buffer_number].buffer, buffer_infos[rd_buffer_number].count, tx_buf, false);
         buffer_infos[rd_buffer_number].busy = false;
         rd_buffer_number++; //switch buffer
         if (rd_buffer_number == n_buffers)

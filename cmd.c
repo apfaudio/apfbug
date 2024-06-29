@@ -149,40 +149,36 @@ static void cmd_setvoltage(const uint8_t *commands);
 static void cmd_gotobootloader(void);
 
 static heatshrink_encoder hse;
+static heatshrink_decoder hsd;
 
-void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf) {
+void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host) {
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
 
-  if (!hse_init) {
-    heatshrink_encoder_reset(&hse);
-    hse_init = true;
+  if (!local_host) {
+      if (!hse_init) {
+        heatshrink_encoder_reset(&hse);
+        hse_init = true;
+      }
+
+      if ((cmd_buffer_index + count) < CMD_BUFFER_SZ) {
+        size_t n_sunk = 0;
+        size_t total_sunk = 0;
+        size_t n_polled = 0;
+        while (total_sunk != count) {
+            heatshrink_encoder_sink(&hse, &rxbuf[total_sunk], count-total_sunk, &n_sunk);
+            total_sunk += n_sunk;
+            cmd_buffer_sunk += n_sunk;
+            heatshrink_encoder_poll(&hse, &cmd_buffer[cmd_buffer_index],
+                                    CMD_BUFFER_SZ-cmd_buffer_index, &n_polled);
+            cmd_buffer_index += n_polled;
+        }
+      } else {
+        cmd_buffer_index = (CMD_BUFFER_SZ - 1);
+      }
+
+      cmd_buffer_count += count;
   }
-
-  if ((cmd_buffer_index + count) < CMD_BUFFER_SZ) {
-    /*
-    memcpy(cmd_buffer + cmd_buffer_index, rxbuf, count);
-    cmd_buffer_index += count;
-    */
-
-    size_t n_sunk = 0;
-    size_t total_sunk = 0;
-    size_t n_polled = 0;
-
-    while (total_sunk != count) {
-        heatshrink_encoder_sink(&hse, &rxbuf[total_sunk], count-total_sunk, &n_sunk);
-        total_sunk += n_sunk;
-        cmd_buffer_sunk += n_sunk;
-        heatshrink_encoder_poll(&hse, &cmd_buffer[cmd_buffer_index],
-                                CMD_BUFFER_SZ-cmd_buffer_index, &n_polled);
-        cmd_buffer_index += n_polled;
-    }
-
-  } else {
-    cmd_buffer_index = (CMD_BUFFER_SZ - 1);
-  }
-
-  cmd_buffer_count += count;
 
   while ((commands < (rxbuf + count)) && (*commands != CMD_STOP))
   {
@@ -241,7 +237,7 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
     commands++;
   }
   /* Send the transfer response back to host */
-  if (tx_buf != output_buffer)
+  if ((tx_buf != output_buffer) && !local_host)
   {
     tud_vendor_write(tx_buf, output_buffer - tx_buf);
     tud_vendor_flush();
@@ -310,6 +306,23 @@ void base64_print(
     }
 }
 
+#define DECOMPRESSION_BUF_SZ 2048
+static void decode() {
+    heatshrink_decoder_reset(&hsd);
+    uint32_t compressed_size = cmd_buffer_sunk;
+    size_t sunk = 0;
+    size_t polled = 0;
+    uint8_t decompression_buf[DECOMPRESSION_BUF_SZ];
+    while (sunk < compressed_size) {
+        heatshrink_decoder_sink(&hsd, &cmd_buffer[sunk], compressed_size - sunk, &count);
+        sunk += count;
+        size_t decomp_position = polled % (DECOMPRESSION_BUF_SZ/2);
+        pres = heatshrink_decoder_poll(&hsd, &decompression_buf[polled], DECOMPRESSION_BUF_SZ - polled, &count);
+        polled += count;
+    }
+    heatshrink_decoder_finish(&hsd)
+}
+
 static uint32_t cmd_info(uint8_t *buffer) {
   char info_string[10] = "DJTAG2\n";
   memcpy(buffer, info_string, 10);
@@ -330,6 +343,8 @@ static uint32_t cmd_info(uint8_t *buffer) {
   base64_print((uint8_t*)&cmd_buffer_sunk, 4);
   uputs("\n\rcommand bytes: ");
   base64_print((uint8_t*)&cmd_buffer_count, 4);
+
+  decode();
 
   cmd_buffer_index = 0;
   cmd_buffer_sunk = 0;
