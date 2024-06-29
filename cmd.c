@@ -318,6 +318,7 @@ static uint32_t cmd_info(uint8_t *buffer) {
     size_t n_polled = 0;
     heatshrink_encoder_poll(&hse, &cmd_buffer[cmd_buffer_index],
                             CMD_BUFFER_SZ-cmd_buffer_index, &n_polled);
+    cmd_buffer_index += n_polled;
   }
 
   uputs("\r\n*** START base64 ***\r\n");
