@@ -6,7 +6,7 @@ started = False
 
 content_raw = ''
 
-with open("img.txt", "r") as f:
+with open("img2.txt", "r") as f:
     for line in f:
         if "* START base64" in line:
             started = True

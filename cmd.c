@@ -32,6 +32,7 @@
 #include "tusb.h"
 #include "pio_jtag.h"
 #include "cmd.h"
+#include "cdc_uart.h"
 
 #include "heatshrink_encoder.h"
 #include "heatshrink_decoder.h"
@@ -152,6 +153,21 @@ static void cmd_gotobootloader(void);
 static heatshrink_encoder hse;
 static heatshrink_decoder hsd;
 
+void uputc(char c) {
+    uint uart_index = uart_get_index(PIN_UART1);
+    while (0 == tud_cdc_n_write(uart_index, &c, 1)) {
+        tud_task();
+    }
+}
+
+void uputs(const char *c) {
+    while (*c != '\0') {
+        uputc(*c);
+        ++c;
+    }
+}
+
+
 uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host) {
 
   uint8_t *commands= (uint8_t*)rxbuf;
@@ -234,7 +250,7 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
       break;
 
     default:
-      return (commands - rxbuf) + 1; /* Unsupported command, halt */
+      uputc(*commands);
       break;
     }
 
@@ -258,20 +274,6 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
 
 static const unsigned char base64_table[65] =
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-void uputc(char c) {
-    uint uart_index = uart_get_index(PIN_UART1);
-    while (0 == tud_cdc_n_write(uart_index, &c, 1)) {
-        tud_task();
-    }
-}
-
-void uputs(const char *c) {
-    while (*c != '\0') {
-        uputc(*c);
-        ++c;
-    }
-}
 
 void base64_print(
     const unsigned char *src, size_t len)
@@ -318,8 +320,8 @@ void base64_print(
 
 #define DECOMPRESSION_BUF_SZ 2048
 #define FAKE_TX_BUF_SZ       1024
-#define HANDLE_WATER         128
-#define HANDLE_MAX           64
+#define HANDLE_WATER         1024
+#define HANDLE_MAX           512
 
 extern pio_jtag_inst_t jtag;
 
@@ -343,32 +345,49 @@ static void decode() {
     while (sunk < compressed_size) {
 
         // Read from saved command buffer
-        size_t count = 0;
-        heatshrink_decoder_sink(&hsd, &cmd_buffer[sunk], compressed_size - sunk, &count);
-        sunk += count;
+        size_t scount = 0;
+        heatshrink_decoder_sink(&hsd, &cmd_buffer[sunk],
+                                compressed_size - sunk, &scount);
+        sunk += scount;
+
+        if (sunk == compressed_size) {
+            heatshrink_decoder_finish(&hsd);
+        }
 
         // Decompress as much as we can from what we just sunk.
         HSD_poll_res pres;
         do {
+            size_t pcount = 0;
             pres = heatshrink_decoder_poll(
-                &hsd, &decompression_buf[bytes_in_decomp], DECOMPRESSION_BUF_SZ - bytes_in_decomp, &count);
-            bytes_in_decomp += count;
-            bytes_total_decomp += count;
+                &hsd, &decompression_buf[bytes_in_decomp],
+                DECOMPRESSION_BUF_SZ - bytes_in_decomp, &pcount);
+            bytes_in_decomp += pcount;
+            bytes_total_decomp += pcount;
+
         } while ((pres == HSDR_POLL_MORE) && (bytes_in_decomp < DECOMPRESSION_BUF_SZ));
 
         // If we have a lot of decompressed commands pending, handle them until it's less than HANDLE_WATER
         while (bytes_in_decomp >= HANDLE_WATER) {
             size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], HANDLE_MAX, fake_tx_buf, true);
-            memcpy(decompression_buf, decompression_buf + n_handled, bytes_in_decomp - n_handled);
+
+            // Can't rely on memcpy copy order!
+            for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
+                (decompression_buf)[i] = (decompression_buf + n_handled)[i];
+            }
+
             bytes_in_decomp -= n_handled;
             total_handled += n_handled;
         }
+
     }
-    heatshrink_decoder_finish(&hsd);
 
     while (bytes_in_decomp > 0) {
         size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], bytes_in_decomp, fake_tx_buf, true);
-        memcpy(decompression_buf, decompression_buf + n_handled, bytes_in_decomp - n_handled);
+
+        for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
+            (decompression_buf)[i] = (decompression_buf + n_handled)[i];
+        }
+
         bytes_in_decomp -= n_handled;
         total_handled += n_handled;
     }
