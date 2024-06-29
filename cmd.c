@@ -64,7 +64,7 @@ enum SignalIdentifier {
   SIG_SRST = 1 << 6
 };
 
-#define CMD_BUFFER_SZ 32768
+#define CMD_BUFFER_SZ 4*32768
 static uint8_t cmd_buffer[CMD_BUFFER_SZ];
 static uint32_t cmd_buffer_index = 0;
 
@@ -220,16 +220,75 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
   return;
 }
 
+static const unsigned char base64_table[65] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+void uputc(char c) {
+    uint uart_index = uart_get_index(PIN_UART1);
+    while (0 == tud_cdc_n_write(uart_index, &c, 1)) {
+        tud_task();
+    }
+}
+
+void uputs(const char *c) {
+    while (*c != '\0') {
+        uputc(*c);
+        ++c;
+    }
+}
+
+void base64_print(
+    const unsigned char *src, size_t len)
+{
+	const unsigned char *end, *in;
+	int line_len;
+
+	end = src + len;
+	in = src;
+	line_len = 0;
+	while (end - in >= 3) {
+		uputc(base64_table[in[0] >> 2]);
+		uputc(base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)]);
+		uputc(base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)]);
+		uputc(base64_table[in[2] & 0x3f]);
+		in += 3;
+		line_len += 4;
+		if (line_len >= 72) {
+			uputc('\r');
+			uputc('\n');
+			line_len = 0;
+		}
+	}
+
+	if (end - in) {
+		uputc(base64_table[in[0] >> 2]);
+		if (end - in == 1) {
+			uputc(base64_table[(in[0] & 0x03) << 4]);
+			uputc('=');
+		} else {
+			uputc(base64_table[((in[0] & 0x03) << 4) |
+					      (in[1] >> 4)]);
+			uputc(base64_table[(in[1] & 0x0f) << 2]);
+		}
+		uputc('=');
+		line_len += 4;
+	}
+
+	if (line_len) {
+        uputc('\r');
+        uputc('\n');
+    }
+}
+
 static uint32_t cmd_info(uint8_t *buffer) {
   char info_string[10] = "DJTAG2\n";
   memcpy(buffer, info_string, 10);
 
-  uint uart_index = uart_get_index(PIN_UART1);
-  for (uint32_t i = 0; i != cmd_buffer_index; ++i) {
-    while (0 == tud_cdc_n_write(uart_index, &cmd_buffer[i], 1)) {
-        tud_task();
-    }
-  }
+  uputs("\r\n*** START base64 ***\r\n");
+  base64_print(cmd_buffer, cmd_buffer_index);
+  uputs("\r\n*** END base64 ***\r\n");
+  base64_print((uint8_t*)&cmd_buffer_index, 4);
+  cmd_buffer_index = 0;
 
   return 10;
 }
