@@ -13,7 +13,7 @@
 
 #include "dirtyJtagConfig.h"
 
-#define MULTICORE
+//#define MULTICORE
 
 void init_pins()
 {

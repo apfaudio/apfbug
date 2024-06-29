@@ -64,6 +64,10 @@ enum SignalIdentifier {
   SIG_SRST = 1 << 6
 };
 
+#define CMD_BUFFER_SZ 32768
+static uint8_t cmd_buffer[CMD_BUFFER_SZ];
+static uint32_t cmd_buffer_index = 0;
+
 /**
  * @brief Handle CMD_INFO command
  *
@@ -142,6 +146,14 @@ static void cmd_gotobootloader(void);
 void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf) {
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
+
+  if ((cmd_buffer_index + count) < CMD_BUFFER_SZ) {
+    memcpy(cmd_buffer + cmd_buffer_index, rxbuf, count);
+    cmd_buffer_index += count;
+  } else {
+    cmd_buffer_index = (CMD_BUFFER_SZ - 1);
+  }
+
   while ((commands < (rxbuf + count)) && (*commands != CMD_STOP))
   {
     switch ((*commands)&0x0F) {
@@ -190,7 +202,7 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
     case CMD_GOTOBOOTLOADER:
       cmd_gotobootloader();
       break;
-      
+
     default:
       return; /* Unsupported command, halt */
       break;
@@ -204,12 +216,21 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
     tud_vendor_write(tx_buf, output_buffer - tx_buf);
     tud_vendor_flush();
   }
+
   return;
 }
 
 static uint32_t cmd_info(uint8_t *buffer) {
   char info_string[10] = "DJTAG2\n";
   memcpy(buffer, info_string, 10);
+
+  uint uart_index = uart_get_index(PIN_UART1);
+  for (uint32_t i = 0; i != cmd_buffer_index; ++i) {
+    while (0 == tud_cdc_n_write(uart_index, &cmd_buffer[i], 1)) {
+        tud_task();
+    }
+  }
+
   return 10;
 }
 
