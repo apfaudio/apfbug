@@ -158,6 +158,9 @@ void uputc(char c) {
     while (0 == tud_cdc_n_write(uart_index, &c, 1)) {
         tud_task();
     }
+    cdc_uart_task();
+    tud_cdc_n_write_flush(uart_index);
+    tud_task();
 }
 
 void uputs(const char *c) {
@@ -250,7 +253,7 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
       break;
 
     default:
-      uputc(*commands);
+      uputs("unknown\n");
       break;
     }
 
@@ -320,8 +323,8 @@ void base64_print(
 
 #define DECOMPRESSION_BUF_SZ 2048
 #define FAKE_TX_BUF_SZ       1024
-#define HANDLE_WATER         1024
-#define HANDLE_MAX           512
+#define HANDLE_WATER         256
+#define HANDLE_MAX           128
 
 extern pio_jtag_inst_t jtag;
 
@@ -342,7 +345,8 @@ static void decode() {
     size_t bytes_in_decomp = 0;
     size_t bytes_total_decomp = 0;
     size_t total_handled = 0;
-    while (sunk < compressed_size) {
+    bool abort = false;
+    while (sunk < compressed_size && !abort) {
 
         // Read from saved command buffer
         size_t scount = 0;
@@ -363,17 +367,26 @@ static void decode() {
                 DECOMPRESSION_BUF_SZ - bytes_in_decomp, &pcount);
             bytes_in_decomp += pcount;
             bytes_total_decomp += pcount;
-
-        } while ((pres == HSDR_POLL_MORE) && (bytes_in_decomp < DECOMPRESSION_BUF_SZ));
+        } while (pres == HSDR_POLL_MORE);
 
         // If we have a lot of decompressed commands pending, handle them until it's less than HANDLE_WATER
         while (bytes_in_decomp >= HANDLE_WATER) {
-            size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], HANDLE_MAX, fake_tx_buf, true);
+            size_t n_handled = cmd_handle(&jtag, decompression_buf, HANDLE_MAX, fake_tx_buf, true);
+
+            base64_print((uint8_t*)&decompression_buf, n_handled);
+            base64_print((uint8_t*)&bytes_total_decomp, 4);
+
+            if (n_handled > bytes_in_decomp) {
+                uputs("abort\n");
+                abort = true;
+                break;
+            }
 
             // Can't rely on memcpy copy order!
             for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
                 (decompression_buf)[i] = (decompression_buf + n_handled)[i];
             }
+
 
             bytes_in_decomp -= n_handled;
             total_handled += n_handled;
@@ -381,7 +394,7 @@ static void decode() {
 
     }
 
-    while (bytes_in_decomp > 0) {
+    while (bytes_in_decomp > 0 && !abort) {
         size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], bytes_in_decomp, fake_tx_buf, true);
 
         for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
@@ -390,6 +403,7 @@ static void decode() {
 
         bytes_in_decomp -= n_handled;
         total_handled += n_handled;
+
     }
 
     uputs("\n\rdecompressed bytes: ");
