@@ -37,6 +37,8 @@
 #include "heatshrink_encoder.h"
 #include "heatshrink_decoder.h"
 
+#include "out.c"
+
 
 enum CommandIdentifier {
   CMD_STOP = 0x00,
@@ -68,12 +70,14 @@ enum SignalIdentifier {
   SIG_SRST = 1 << 6
 };
 
+/*
 #define CMD_BUFFER_SZ 3*32768
 static uint8_t cmd_buffer[CMD_BUFFER_SZ];
 static uint32_t cmd_buffer_index = 0;
 static uint32_t cmd_buffer_sunk = 0;
 static uint32_t cmd_buffer_count = 0;
 static bool hse_init = false;
+*/
 
 /**
  * @brief Handle CMD_INFO command
@@ -176,6 +180,7 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
 
+  /*
   if (!local_host) {
       if (!hse_init) {
         heatshrink_encoder_reset(&hse);
@@ -200,6 +205,7 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
 
       cmd_buffer_count += count;
   }
+  */
 
   while ((commands < (rxbuf + count)) && (*commands != CMD_STOP))
   {
@@ -373,8 +379,8 @@ static void decode() {
         while (bytes_in_decomp >= HANDLE_WATER) {
             size_t n_handled = cmd_handle(&jtag, decompression_buf, HANDLE_MAX, fake_tx_buf, true);
 
-            base64_print((uint8_t*)&decompression_buf, n_handled);
-            base64_print((uint8_t*)&bytes_total_decomp, 4);
+            //base64_print((uint8_t*)&decompression_buf, n_handled);
+            //base64_print((uint8_t*)&bytes_total_decomp, 4);
 
             if (n_handled > bytes_in_decomp) {
                 uputs("abort\n");
@@ -417,6 +423,7 @@ static uint32_t cmd_info(uint8_t *buffer) {
   char info_string[10] = "DJTAG2\n";
   memcpy(buffer, info_string, 10);
 
+  /*
   while(HSER_FINISH_MORE == heatshrink_encoder_finish(&hse)) {
     size_t n_polled = 0;
     heatshrink_encoder_poll(&hse, &cmd_buffer[cmd_buffer_index],
@@ -433,13 +440,16 @@ static uint32_t cmd_info(uint8_t *buffer) {
   base64_print((uint8_t*)&cmd_buffer_sunk, 4);
   uputs("\n\rcommand bytes: ");
   base64_print((uint8_t*)&cmd_buffer_count, 4);
+  */
 
   decode();
 
+  /*
   cmd_buffer_index = 0;
   cmd_buffer_sunk = 0;
   cmd_buffer_count = 0;
   hse_init = false;
+  */
 
   return 10;
 }

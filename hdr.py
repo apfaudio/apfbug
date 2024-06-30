@@ -6,7 +6,7 @@ started = False
 
 content_raw = ''
 
-with open("img2.txt", "r") as f:
+with open("img_blink.txt", "r") as f:
     for line in f:
         if "* START base64" in line:
             started = True
@@ -22,7 +22,8 @@ with open("out.bin", "wb") as f:
     f.write(content_decoded)
 
 with open("out.c", "w") as f:
-    f.write(f"uint8_t data[{len(content_decoded)}]")
+    f.write(f"uint32_t cmd_buffer_sunk = {len(content_decoded)};\n")
+    f.write(f"uint8_t cmd_buffer[{len(content_decoded)}]")
     f.write(" = {\n")
     line = ''
     for byte in content_decoded:
@@ -34,4 +35,4 @@ with open("out.c", "w") as f:
         else:
             line += ' '
     f.write('\t' + line)
-    f.write('\n}')
+    f.write('\n};')

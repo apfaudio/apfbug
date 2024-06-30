@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "out.c"
+
+#include "heatshrink_decoder.h"
+
 enum CommandIdentifier {
   CMD_STOP = 0x00,
   CMD_INFO = 0x01,
@@ -104,7 +108,7 @@ uint32_t cmd_handle(uint8_t* rxbuf, uint32_t count) {
       break;
 
     default:
-      return 0; /* Unsupported command, halt */
+      printf("UNKNOWN\n");
       break;
     }
 
@@ -121,7 +125,88 @@ uint32_t cmd_handle(uint8_t* rxbuf, uint32_t count) {
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
+#define DECOMPRESSION_BUF_SZ 2048
+#define FAKE_TX_BUF_SZ       1024
+#define HANDLE_WATER         256
+#define HANDLE_MAX           128
+
+static heatshrink_decoder hsd;
+
+uint8_t decompression_buf[DECOMPRESSION_BUF_SZ];
+
+static void decode() {
+
+    heatshrink_decoder_reset(&hsd);
+    uint32_t compressed_size = cmd_buffer_sunk;
+    size_t sunk = 0;
+    size_t bytes_in_decomp = 0;
+    size_t bytes_total_decomp = 0;
+    size_t total_handled = 0;
+    bool abort = false;
+    while (sunk < compressed_size && !abort) {
+
+        // Read from saved command buffer
+        size_t scount = 0;
+        heatshrink_decoder_sink(&hsd, &cmd_buffer[sunk],
+                                compressed_size - sunk, &scount);
+        sunk += scount;
+
+        if (sunk == compressed_size) {
+            heatshrink_decoder_finish(&hsd);
+        }
+
+        // Decompress as much as we can from what we just sunk.
+        HSD_poll_res pres;
+        do {
+            size_t pcount = 0;
+            pres = heatshrink_decoder_poll(
+                &hsd, &decompression_buf[bytes_in_decomp],
+                DECOMPRESSION_BUF_SZ - bytes_in_decomp, &pcount);
+            bytes_in_decomp += pcount;
+            bytes_total_decomp += pcount;
+        } while (pres == HSDR_POLL_MORE);
+
+        // If we have a lot of decompressed commands pending, handle them until it's less than HANDLE_WATER
+        while (bytes_in_decomp >= HANDLE_WATER) {
+            size_t n_handled = cmd_handle(&decompression_buf[0], HANDLE_MAX);
+
+            if (n_handled > bytes_in_decomp) {
+                printf("abort\n");
+                abort = true;
+                break;
+            }
+
+            // Can't rely on memcpy copy order!
+            for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
+                (decompression_buf)[i] = (decompression_buf + n_handled)[i];
+            }
+
+
+            bytes_in_decomp -= n_handled;
+            total_handled += n_handled;
+        }
+
+    }
+
+    while (bytes_in_decomp > 0 && !abort) {
+        size_t n_handled = cmd_handle(&decompression_buf[0], bytes_in_decomp);
+
+        for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
+            (decompression_buf)[i] = (decompression_buf + n_handled)[i];
+        }
+
+        bytes_in_decomp -= n_handled;
+        total_handled += n_handled;
+
+    }
+
+    printf("n_handled: %i\n", total_handled);
+    printf("n_decompressed: %i\n", bytes_total_decomp);
+}
+
 int main() {
+    decode();
+    /*
     uint8_t *decompression_buf = malloc(1024*1024);
     FILE *ptr;
     ptr = fopen("outx.bin","rb");
@@ -141,4 +226,5 @@ int main() {
     }
 
     printf("handled: %i\n", total_handled);
+    */
 }
