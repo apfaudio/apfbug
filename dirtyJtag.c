@@ -13,7 +13,7 @@
 
 #include "dirtyJtagConfig.h"
 
-#define MULTICORE
+//#define MULTICORE
 
 void init_pins()
 {
@@ -126,7 +126,7 @@ void fetch_command()
 #ifndef MULTICORE
     if (buffer_infos[rd_buffer_number].busy)
     {
-        cmd_handle(&jtag, buffer_infos[rd_buffer_number].buffer, buffer_infos[rd_buffer_number].count, tx_buf);
+        cmd_handle(&jtag, buffer_infos[rd_buffer_number].buffer, buffer_infos[rd_buffer_number].count, tx_buf, false);
         buffer_infos[rd_buffer_number].busy = false;
         rd_buffer_number++; //switch buffer
         if (rd_buffer_number == n_buffers)
@@ -144,6 +144,8 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
     if (stage != CONTROL_STAGE_SETUP) return true;
     return false;
 }
+
+extern bool reconfigure;
 
 int main()
 {
@@ -167,5 +169,9 @@ int main()
     while (1) {
         jtag_main_task();
         fetch_command();//for unicore implementation
+        if (reconfigure) {
+            decode();
+            reconfigure = false;
+        }
     }
 }

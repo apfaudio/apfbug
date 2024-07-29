@@ -33,6 +33,8 @@
 #include "pio_jtag.h"
 #include "cmd.h"
 
+#include "heatshrink_decoder.h"
+#include "out.c"
 
 enum CommandIdentifier {
   CMD_STOP = 0x00,
@@ -139,7 +141,9 @@ static void cmd_setvoltage(const uint8_t *commands);
  */
 static void cmd_gotobootloader(void);
 
-void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf) {
+static heatshrink_decoder hsd;
+
+uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host) {
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
   while ((commands < (rxbuf + count)) && (*commands != CMD_STOP))
@@ -147,8 +151,10 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
     switch ((*commands)&0x0F) {
     case CMD_INFO:
     {
-      uint32_t trbytes = cmd_info(output_buffer);
-      output_buffer += trbytes;
+        if (!local_host) {
+          uint32_t trbytes = cmd_info(output_buffer);
+          output_buffer += trbytes;
+        }
       break;
     }
     case CMD_FREQ:
@@ -192,20 +198,107 @@ void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* 
       break;
       
     default:
-      return; /* Unsupported command, halt */
       break;
     }
 
     commands++;
   }
   /* Send the transfer response back to host */
-  if (tx_buf != output_buffer)
+  if ((tx_buf != output_buffer) && !local_host)
   {
     tud_vendor_write(tx_buf, output_buffer - tx_buf);
     tud_vendor_flush();
   }
-  return;
+
+  // Count CMD_STOP as a recieved command.
+  if (*commands == CMD_STOP) {
+      ++commands;
+  }
+
+
+  return commands - rxbuf;
 }
+
+#define DECOMPRESSION_BUF_SZ 2048
+#define FAKE_TX_BUF_SZ       1024
+#define HANDLE_WATER         256
+#define HANDLE_MAX           128
+
+extern pio_jtag_inst_t jtag;
+
+uint8_t decompression_buf[DECOMPRESSION_BUF_SZ];
+uint8_t fake_tx_buf[FAKE_TX_BUF_SZ];
+
+void decode() {
+
+    if (cmd_buffer_sunk < 1000) {
+        return;
+    }
+
+    heatshrink_decoder_reset(&hsd);
+    uint32_t compressed_size = cmd_buffer_sunk;
+    size_t sunk = 0;
+    size_t bytes_in_decomp = 0;
+    size_t bytes_total_decomp = 0;
+    size_t total_handled = 0;
+    bool abort = false;
+    while (sunk < compressed_size && !abort) {
+
+        // Read from saved command buffer
+        size_t scount = 0;
+        heatshrink_decoder_sink(&hsd, &cmd_buffer[sunk],
+                                compressed_size - sunk, &scount);
+        sunk += scount;
+
+        if (sunk == compressed_size) {
+            heatshrink_decoder_finish(&hsd);
+        }
+
+        // Decompress as much as we can from what we just sunk.
+        HSD_poll_res pres;
+        do {
+            size_t pcount = 0;
+            pres = heatshrink_decoder_poll(
+                &hsd, &decompression_buf[bytes_in_decomp],
+                DECOMPRESSION_BUF_SZ - bytes_in_decomp, &pcount);
+            bytes_in_decomp += pcount;
+            bytes_total_decomp += pcount;
+        } while (pres == HSDR_POLL_MORE);
+
+        // If we have a lot of decompressed commands pending, handle them until it's less than HANDLE_WATER
+        while (bytes_in_decomp >= HANDLE_WATER) {
+            size_t n_handled = cmd_handle(&jtag, decompression_buf, HANDLE_MAX, fake_tx_buf, true);
+
+            if (n_handled > bytes_in_decomp) {
+                abort = true;
+                break;
+            }
+
+            // Can't rely on memcpy copy order!
+            for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
+                (decompression_buf)[i] = (decompression_buf + n_handled)[i];
+            }
+
+
+            bytes_in_decomp -= n_handled;
+            total_handled += n_handled;
+        }
+
+    }
+
+    while (bytes_in_decomp > 0 && !abort) {
+        size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], bytes_in_decomp, fake_tx_buf, true);
+
+        for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
+            (decompression_buf)[i] = (decompression_buf + n_handled)[i];
+        }
+
+        bytes_in_decomp -= n_handled;
+        total_handled += n_handled;
+
+    }
+}
+
 
 static uint32_t cmd_info(uint8_t *buffer) {
   char info_string[10] = "DJTAG2\n";

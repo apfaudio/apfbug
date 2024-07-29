@@ -28,6 +28,8 @@
 #include "led.h"
 #include "tusb.h"
 #include "cdc_uart.h"
+#include "cmd.h"
+
 static uint8_t tx_bufs[2][TX_BUFFER_SIZE] __attribute__((aligned(TX_BUFFER_SIZE)));
 static struct uart_device
 {
@@ -164,9 +166,10 @@ static void dma_handler()
 	dma_hw->ints1 = ints;
 }
 
-char *code = "touch";
-size_t code_len   = 5;
+char *code = "BITSTREAM";
+size_t code_len   = 9;
 size_t code_index = 0;
+bool reconfigure = false;
 
 void intercept_uart(struct uart_device *uart, volatile uint8_t *buffer, uint32_t size)
 {
@@ -176,6 +179,7 @@ void intercept_uart(struct uart_device *uart, volatile uint8_t *buffer, uint32_t
                 char *hello = "\r\n[REBOOT]\r\n";
                 tud_cdc_n_write(uart->index, hello, strlen(hello));
                 tud_cdc_n_write_flush(uart->index);
+                reconfigure = true;
             } else {
                 ++code_index;
             }
