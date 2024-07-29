@@ -164,6 +164,27 @@ static void dma_handler()
 	dma_hw->ints1 = ints;
 }
 
+char *code = "touch";
+size_t code_len   = 5;
+size_t code_index = 0;
+
+void intercept_uart(struct uart_device *uart, volatile uint8_t *buffer, uint32_t size)
+{
+    for (size_t i = 0; i != size; ++i) {
+        if (buffer[i] == code[code_index]) {
+            if (code_index == (code_len-1)) {
+                char *hello = "\r\n[REBOOT]\r\n";
+                tud_cdc_n_write(uart->index, hello, strlen(hello));
+                tud_cdc_n_write_flush(uart->index);
+            } else {
+                ++code_index;
+            }
+        } else {
+            code_index = 0;
+        }
+    }
+}
+
 bool cdc_stopped = false;
 void cdc_uart_task(void)
 {
@@ -198,6 +219,7 @@ void cdc_uart_task(void)
 					if (space < FULL_SWO_PACKET)
 						tud_cdc_n_write_flush(uart->index);
 					tud_task();
+                    intercept_uart(uart, uart->rx_read_address, written);
 					uart->rx_read_address += written;
 					if (uart->rx_read_address >= &uart->rx_buf[RX_BUFFER_SIZE])
 						uart->rx_read_address -= RX_BUFFER_SIZE;
@@ -228,10 +250,27 @@ void cdc_uart_task(void)
 				led_rx( 0 );
 			}
 		}
-		else if (uart->is_connected)
+		else
 		{
 			tud_cdc_n_write_clear(uart->index);
-			uart->is_connected = 0;
+
+            // Same logic as above for reading UART traffic however redirect it to intercept_uart()
+            // Warn: UART traffic is now consumed when USB disconnected!
+			volatile uint8_t *wa = (uint8_t*)(dma_channel_hw_addr(uart->rx_dma_channel)->write_addr);
+			if (wa == &uart->rx_buf[RX_BUFFER_SIZE])
+			{
+				wa = &uart->rx_buf[0];
+			}
+			uint32_t space = (wa >= uart->rx_read_address) ? (wa - uart->rx_read_address) : (wa + RX_BUFFER_SIZE - uart->rx_read_address);
+			uart->n_checks++;
+			if ((space >= FULL_SWO_PACKET) || ((space != 0) && (uart->n_checks > 4)))
+			{
+				uart->n_checks = 0;
+                intercept_uart(uart, uart->rx_read_address, space);
+                uart->rx_read_address += space;
+                if (uart->rx_read_address >= &uart->rx_buf[RX_BUFFER_SIZE])
+                    uart->rx_read_address -= RX_BUFFER_SIZE;
+            }
 		}
 	}
 }
