@@ -26,4 +26,9 @@
  * @param transfer Received packet
  * @return Command needs to send data back to host
  */
-void cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf);
+
+#include "pio_jtag.h"
+
+bool cmd_data_for_index(size_t ix, uint32_t *size_out, uint8_t **buffer_out);
+void replay_compressed_jtag_sequence(uint32_t cmd_buffer_sunk, uint8_t *cmd_buffer);
+uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host);

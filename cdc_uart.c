@@ -28,6 +28,8 @@
 #include "led.h"
 #include "tusb.h"
 #include "cdc_uart.h"
+#include "cmd.h"
+
 static uint8_t tx_bufs[2][TX_BUFFER_SIZE] __attribute__((aligned(TX_BUFFER_SIZE)));
 static struct uart_device
 {
@@ -164,6 +166,36 @@ static void dma_handler()
 	dma_hw->ints1 = ints;
 }
 
+char *code = "BITSTREAM";
+size_t code_len   = 9;
+size_t code_index = 0;
+uint32_t reconfigure = 0;
+bool next_is_cmd = false;
+
+void intercept_uart(struct uart_device *uart, volatile uint8_t *buffer, uint32_t size)
+{
+    for (size_t i = 0; i != size; ++i) {
+        if (next_is_cmd) {
+            reconfigure = 1 + (buffer[i] - '0');
+            char *hello = "\r\n[REBOOT]\r\n";
+            tud_cdc_n_write(uart->index, hello, strlen(hello));
+            tud_cdc_n_write(uart->index, &buffer[i], 1);
+            tud_cdc_n_write_flush(uart->index);
+            next_is_cmd = false;
+        }
+        if (buffer[i] == code[code_index]) {
+            if (code_index == (code_len-1)) {
+                next_is_cmd = true;
+                code_index = 0;
+            } else {
+                ++code_index;
+            }
+        } else {
+            code_index = 0;
+        }
+    }
+}
+
 bool cdc_stopped = false;
 void cdc_uart_task(void)
 {
@@ -198,6 +230,7 @@ void cdc_uart_task(void)
 					if (space < FULL_SWO_PACKET)
 						tud_cdc_n_write_flush(uart->index);
 					tud_task();
+                    intercept_uart(uart, uart->rx_read_address, written);
 					uart->rx_read_address += written;
 					if (uart->rx_read_address >= &uart->rx_buf[RX_BUFFER_SIZE])
 						uart->rx_read_address -= RX_BUFFER_SIZE;
@@ -228,10 +261,27 @@ void cdc_uart_task(void)
 				led_rx( 0 );
 			}
 		}
-		else if (uart->is_connected)
+		else
 		{
 			tud_cdc_n_write_clear(uart->index);
-			uart->is_connected = 0;
+
+            // Same logic as above for reading UART traffic however redirect it to intercept_uart()
+            // Warn: UART traffic is now consumed when USB disconnected!
+			volatile uint8_t *wa = (uint8_t*)(dma_channel_hw_addr(uart->rx_dma_channel)->write_addr);
+			if (wa == &uart->rx_buf[RX_BUFFER_SIZE])
+			{
+				wa = &uart->rx_buf[0];
+			}
+			uint32_t space = (wa >= uart->rx_read_address) ? (wa - uart->rx_read_address) : (wa + RX_BUFFER_SIZE - uart->rx_read_address);
+			uart->n_checks++;
+			if ((space >= FULL_SWO_PACKET) || ((space != 0) && (uart->n_checks > 4)))
+			{
+				uart->n_checks = 0;
+                intercept_uart(uart, uart->rx_read_address, space);
+                uart->rx_read_address += space;
+                if (uart->rx_read_address >= &uart->rx_buf[RX_BUFFER_SIZE])
+                    uart->rx_read_address -= RX_BUFFER_SIZE;
+            }
 		}
 	}
 }

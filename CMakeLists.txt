@@ -29,6 +29,7 @@ add_executable(dirtyJtag
 		get_serial.c
 		cmd.c
         led.c
+        heatshrink_decoder.c
 )
 
 target_include_directories(dirtyJtag PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
