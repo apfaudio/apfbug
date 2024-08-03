@@ -1,4 +1,4 @@
-# `apfebug` - RP2040 debug probe
+# `apfelbug` - RP2040 debug probe with offline JTAG replay
 
 <sup>WARN: 🚧 under construction! 🚧 - this is in active development</sup>
 
