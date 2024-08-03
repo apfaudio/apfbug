@@ -169,17 +169,24 @@ static void dma_handler()
 char *code = "BITSTREAM";
 size_t code_len   = 9;
 size_t code_index = 0;
-bool reconfigure = false;
+uint32_t reconfigure = 0;
+bool next_is_cmd = false;
 
 void intercept_uart(struct uart_device *uart, volatile uint8_t *buffer, uint32_t size)
 {
     for (size_t i = 0; i != size; ++i) {
+        if (next_is_cmd) {
+            reconfigure = 1 + (buffer[i] - '0');
+            char *hello = "\r\n[REBOOT]\r\n";
+            tud_cdc_n_write(uart->index, hello, strlen(hello));
+            tud_cdc_n_write(uart->index, &buffer[i], 1);
+            tud_cdc_n_write_flush(uart->index);
+            next_is_cmd = false;
+        }
         if (buffer[i] == code[code_index]) {
             if (code_index == (code_len-1)) {
-                char *hello = "\r\n[REBOOT]\r\n";
-                tud_cdc_n_write(uart->index, hello, strlen(hello));
-                tud_cdc_n_write_flush(uart->index);
-                reconfigure = true;
+                next_is_cmd = true;
+                code_index = 0;
             } else {
                 ++code_index;
             }

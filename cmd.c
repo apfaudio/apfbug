@@ -34,7 +34,7 @@
 #include "cmd.h"
 
 #include "heatshrink_decoder.h"
-#include "out.c"
+#include "stubs/stub_data.c"
 
 enum CommandIdentifier {
   CMD_STOP = 0x00,
@@ -229,7 +229,7 @@ extern pio_jtag_inst_t jtag;
 uint8_t decompression_buf[DECOMPRESSION_BUF_SZ];
 uint8_t fake_tx_buf[FAKE_TX_BUF_SZ];
 
-void decode() {
+void replay_compressed_jtag_sequence(uint32_t cmd_buffer_sunk, uint8_t *cmd_buffer) {
 
     if (cmd_buffer_sunk < 1000) {
         return;

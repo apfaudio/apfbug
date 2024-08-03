@@ -145,7 +145,7 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
     return false;
 }
 
-extern bool reconfigure;
+extern uint32_t reconfigure;
 
 int main()
 {
@@ -169,9 +169,13 @@ int main()
     while (1) {
         jtag_main_task();
         fetch_command();//for unicore implementation
-        if (reconfigure) {
-            decode();
-            reconfigure = false;
+        if (reconfigure != 0) {
+            uint32_t size_out = 0;
+            uint8_t* buffer_out = NULL;
+            if (cmd_data_for_index((reconfigure-1), &size_out, &buffer_out)) {
+                replay_compressed_jtag_sequence(size_out, buffer_out);
+            }
+            reconfigure = 0;
         }
     }
 }
