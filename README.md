@@ -1,15 +1,15 @@
-# `apfelbug` - RP2040 debug probe with offline JTAG replay
+# `apfbug` - RP2040 debug probe with offline JTAG replay
 
 <sup>WARN: 🚧 under construction! 🚧 - this is in active development</sup>
 
 ## What is this?
 
-- Firmware for the RP2040-based JTAG debug probe built into [Tiliqua](https://github.com/apfelaudio/tiliqua).
-- `apfelbug` started as a fork of the [pico-dirtyJtag](https://github.com/phdussud/pico-dirtyJtag) project.
+- Firmware for the RP2040-based JTAG debug probe built into [Tiliqua](https://github.com/apfaudio/tiliqua).
+- `apfbug` started as a fork of the [pico-dirtyJtag](https://github.com/phdussud/pico-dirtyJtag) project.
 
 ## What has been added?
 
-`apfelbug` includes the same features as `pico-dirtyjtag` (USB-JTAG and USB-UART bridge), with some additions:
+`apfbug` includes the same features as `pico-dirtyjtag` (USB-JTAG and USB-UART bridge), with some additions:
 - UART traffic is inspected to look for keywords.
 - If a keyword is encountered e.g. `BITSTREAM1`, a pre-recorded JTAG stream stored on the RP2040's SPI flash is decompressed and replayed.
 - This facilitates ECP5 multiboot (jumping to arbitrary bitstreams) without needing to write to the ECP5's SPI flash.
@@ -21,7 +21,7 @@
     - flash `boot` bitstream to offset 0x0
     - flash user bitstreams to 0x100000, 0x200000, 0x300000 ... and so on (1MB spacing)
 - DISCONNECT USB DBG port, reboot Tiliqua
-  - Currently `apfelbug` only works correctly with the DBG connector DISCONNECTED or with the UART port open on Linux and CONNECTED. Do not have the USB DBG connected without the UART0 open with `picocom` or so.
+  - Currently `apfbug` only works correctly with the DBG connector DISCONNECTED or with the UART port open on Linux and CONNECTED. Do not have the USB DBG connected without the UART0 open with `picocom` or so.
 - Now when Tiliqua boots you will enter the bootloader. Use the encoder to select an image. Hold the encoder for >5sec in any image to go back to the bootloader.
 
 ## How do I record new JTAG streams and pack them into the stubs on the RP2040 flash?
