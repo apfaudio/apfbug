@@ -45,10 +45,9 @@ tusb_desc_device_t const desc_device =
     .bDeviceSubClass    = 0x00, // Each interface specifies its own
     .bDeviceProtocol    = 0x00,
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
-
-	  .idVendor = 0x1209,
-	  .idProduct = 0xC0CA,
-	  .bcdDevice = 0x0111,
+    .idVendor  = 0x1209,
+    .idProduct = 0xC0CA,
+    .bcdDevice = 0x0111,
     .iManufacturer      = 0x01,
     .iProduct           = 0x02,
     .iSerialNumber      = 0x03,
@@ -125,13 +124,21 @@ uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 // array of pointer to string descriptors
 char const *string_desc_arr[] =
 {
-    (const char[]){0x09, 0x04}, // 0: is supported language is English (0x0409)
-    "Jean THOMAS",              // 1: Manufacturer
-    "DirtyJTAG",                // 2: Product
-    usb_serial,                 // 3: Serial, uses flash unique ID
+    (const char[]){0x09, 0x04},   // 0: is supported language is English (0x0409)
+    "apf.audio",                  // 1: Manufacturer
+#if (TILIQUA_HW_MAJOR == 2)
+    "Tiliqua R2 (dbg)",
+#elif (TILIQUA_HW_MAJOR == 3)
+    "Tiliqua R3 (dbg)",
+#elif (TILIQUA_HW_MAJOR == 4)
+    "Tiliqua R4 (dbg)",
+#else
+#error "Unknown TILIQUA_HW_MAJOR"
+#endif
+    usb_serial,                   // 3: Serial, uses flash unique ID
 #if ( USB_CDC_UART_BRIDGE )
-    "DirtyJTAG CDC 0", // 4: CDC Interface 0
-    "DirtyJTAG CDC 1"  // 5: CDC Interface 1
+    "Tiliqua CDC 0", // 4: CDC Interface 0
+    "Tiliqua CDC 1"  // 5: CDC Interface 1
 #endif
 };
 
@@ -145,26 +152,33 @@ uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
 
   uint8_t chr_count;
 
-  if ( index == 0)
-  {
-    memcpy(&_desc_str[1], string_desc_arr[0], 2);
-    chr_count = 1;
-  }else
-  {
-    // Convert ASCII string into UTF-16
+  if ( index == 0) {
+      memcpy(&_desc_str[1], string_desc_arr[0], 2);
+      chr_count = 1;
+  } else {
+      // Convert ASCII string into UTF-16
+      const char* str;
+      if (index == 0xee) {
+          // Microsoft OS 1.0 String Descriptor
+          str = "MSFT100\xee\x01";
+      } else {
+          if ( !(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0])) ) {
+              return NULL;
+          }
 
-    if ( !(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0])) ) return NULL;
+          str = string_desc_arr[index];
 
-    const char* str = string_desc_arr[index];
+      }
 
-    // Cap at max char
-    chr_count = strlen(str);
-    if ( chr_count > 31 ) chr_count = 31;
+      // Cap at max char
+      chr_count = strlen(str);
+      if ( chr_count > 31 ) chr_count = 31;
 
-    for(uint8_t i=0; i<chr_count; i++)
-    {
-      _desc_str[1+i] = str[i];
-    }
+      for(uint8_t i=0; i<chr_count; i++)
+      {
+          _desc_str[1+i] = str[i];
+      }
+
   }
 
   // first byte is length (including header), second byte is string type
