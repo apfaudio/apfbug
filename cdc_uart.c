@@ -31,7 +31,6 @@
 #include "cdc_uart.h"
 #include "cmd.h"
 
-static uint8_t tx_bufs[2][TX_BUFFER_SIZE] __attribute__((aligned(TX_BUFFER_SIZE)));
 static struct uart_device
 {
 	uint index;
@@ -46,7 +45,23 @@ static struct uart_device
 	uint is_connected;
 } uart_devices[2];
 
+static uint8_t tx_bufs[2][TX_BUFFER_SIZE] __attribute__((aligned(TX_BUFFER_SIZE)));
+static bool cdc_stopped = true; // is CDC connected over USB
+
+// Rx/Tx Buffer handling functions (depend on USB connection state)
 static void dma_handler();
+static void handle_rx_buffer(struct uart_device *uart);
+static void handle_tx_buffer(struct uart_device *uart);
+static void process_connected_rx(struct uart_device *uart, uint32_t available_space);
+static void process_disconnected_rx(struct uart_device *uart, uint32_t available_space);
+static void update_read_pointer(struct uart_device *uart, uint32_t increment);
+
+// Reboot intercept TODO cleanup
+static char *code = "BITSTREAM";
+static size_t code_len   = 9;
+static size_t code_index = 0;
+static bool next_is_cmd = false;
+uint32_t reconfigure = 0;
 
 static uint n_bits(uint n)
 {
@@ -163,15 +178,8 @@ static void dma_handler()
 				dma_channel_set_trans_count(uart->tx_dma_channel, space, true);
 		}
 	}
-	
 	dma_hw->ints1 = ints;
 }
-
-char *code = "BITSTREAM";
-size_t code_len   = 9;
-size_t code_index = 0;
-uint32_t reconfigure = 0;
-bool next_is_cmd = false;
 
 void intercept_uart(struct uart_device *uart, volatile uint8_t *buffer, uint32_t size)
 {
@@ -196,19 +204,6 @@ void intercept_uart(struct uart_device *uart, volatile uint8_t *buffer, uint32_t
         }
     }
 }
-
-bool cdc_stopped = true;
-
-// Buffer handling functions
-void handle_rx_buffer(struct uart_device *uart);
-void handle_tx_buffer(struct uart_device *uart);
-
-// RX processing functions
-void process_connected_rx(struct uart_device *uart, uint32_t available_space);
-void process_disconnected_rx(struct uart_device *uart, uint32_t available_space);
-
-// Helper function
-void update_read_pointer(struct uart_device *uart, uint32_t increment);
 
 void handle_rx_buffer(struct uart_device *uart) {
     volatile uint8_t *write_addr = (uint8_t*)(dma_channel_hw_addr(uart->rx_dma_channel)->write_addr);
