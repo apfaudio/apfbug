@@ -14,19 +14,8 @@
 - If a keyword is encountered e.g. `BITSTREAM1`, a pre-recorded JTAG stream stored on the RP2040's SPI flash is decompressed and replayed.
 - This facilitates ECP5 multiboot (jumping to arbitrary bitstreams) without needing to write to the ECP5's SPI flash.
 
-## How do I use multiboot on Tiliqua?
-- Build and flash this project to the RP2040 (hold RP2040 BOOTSEL during power on, copy the `build/*.uf2` to the usb storage device and reset)
-- On the Tiliqua ECP5 SPI flash:
-  - Using `openFPGALoader -c dirtyJtag <bitstream> -f o <offset>`
-    - flash `boot` bitstream to offset 0x0
-    - flash user bitstreams to 0x100000, 0x200000, 0x300000 ... and so on (1MB spacing)
-- DISCONNECT USB DBG port, reboot Tiliqua
-  - Currently `apfbug` only works correctly with the DBG connector DISCONNECTED or with the UART port open on Linux and CONNECTED. Do not have the USB DBG connected without the UART0 open with `picocom` or so.
-- Now when Tiliqua boots you will enter the bootloader. Use the encoder to select an image. Hold the encoder for >5sec in any image to go back to the bootloader.
-
-## How do I record new JTAG streams and pack them into the stubs on the RP2040 flash?
-
-TODO documentation, not necessary to change this for any ordinary usecase.
+## How do I install/use this?
+- See the Tiliqua documentation: https://apfaudio.github.io/tiliqua/bootloader.html
 
 ## ORIGINAL README FOLLOWS
 
