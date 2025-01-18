@@ -19,6 +19,14 @@ project(dirtyJtag C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
+# Define the required variable with no default value
+if(NOT DEFINED TILIQUA_HW_MAJOR)
+    message(FATAL_ERROR "TILIQUA_HW_MAJOR must be defined. Please pass -DTILIQUA_HW_MAJOR=<value> to cmake")
+endif()
+
+# Add the compile definition
+add_compile_definitions(TILIQUA_HW_MAJOR=${TILIQUA_HW_MAJOR})
+
 # Add executable. Default name is the project name, version 0.1
 
 add_executable(dirtyJtag

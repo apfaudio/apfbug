@@ -4,7 +4,6 @@
 // Set to 0 to disable USB-CDC-UART bridge
 #define USB_CDC_UART_BRIDGE  1
 
-
 #define BOARD_PICO           0
 #define BOARD_ADAFRUIT_ITSY  1
 #define BOARD_SPOKE_RP2040   2

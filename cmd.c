@@ -34,7 +34,15 @@
 #include "cmd.h"
 
 #include "heatshrink_decoder.h"
-#include "stubs/stub_data.c"
+
+// These files contain compressed ROM arrays of JTAG
+// commands required to flash bootloader stubs.
+// TODO: document how to record these!
+#if (TILIQUA_HW_MAJOR == 2)
+#include "bitstreams/bitstreams_sc2.c"
+#else
+#include "bitstreams/bitstreams_sc3.c"
+#endif
 
 enum CommandIdentifier {
   CMD_STOP = 0x00,
