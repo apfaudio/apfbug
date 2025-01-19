@@ -24,6 +24,7 @@
 
 #include <pico/stdlib.h>
 #include <pico/bootrom.h>
+#include <hardware/watchdog.h>
 #include <hardware/dma.h>
 #include <hardware/irq.h>
 #include "led.h"
@@ -303,6 +304,13 @@ void cdc_uart_task(void) {
         if (uart->is_connected) {
             handle_tx_buffer(uart);
         }
+    }
+}
+
+void tud_suspend_cb(bool remote_wakeup_en)
+{
+    if (!remote_wakeup_en) {
+        watchdog_reboot(0, 0, 0);
     }
 }
 

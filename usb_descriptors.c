@@ -71,8 +71,6 @@ enum
 #if ( USB_CDC_UART_BRIDGE )
   ITF_NUM_CDC_1 = 1,
   ITF_NUM_CDC_1_DATA,
-  ITF_NUM_CDC_2 = 3,
-  ITF_NUM_CDC_2_DATA,
 #endif 
   ITF_NUM_TOTAL
 };
@@ -104,7 +102,6 @@ uint8_t const desc_configuration[CONFIG_TOTAL_LEN] =
 #if ( USB_CDC_UART_BRIDGE )
   // Interface 3 : Interface number, string index, EP notification address and size, EP data address (out, in) and size.
   TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_1, 4, CDC_NOTIF_EP1_NUM, 8, CDC_OUT_EP1_NUM, CDC_IN_EP1_NUM, 64),
-  TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_2, 5, CDC_NOTIF_EP2_NUM, 8, CDC_OUT_EP2_NUM, CDC_IN_EP2_NUM, 64),
 #endif
 };
 
@@ -138,7 +135,6 @@ char const *string_desc_arr[] =
     usb_serial,                   // 3: Serial, uses flash unique ID
 #if ( USB_CDC_UART_BRIDGE )
     "Tiliqua CDC 0", // 4: CDC Interface 0
-    "Tiliqua CDC 1"  // 5: CDC Interface 1
 #endif
 };
 
