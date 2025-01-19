@@ -27,8 +27,21 @@ endif()
 # Add the compile definition
 add_compile_definitions(TILIQUA_HW_MAJOR=${TILIQUA_HW_MAJOR})
 
-# Add executable. Default name is the project name, version 0.1
+execute_process(
+    COMMAND git describe --tags --dirty
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_DESCRIBE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
 
+configure_file(
+    ${CMAKE_SOURCE_DIR}/version.h.in
+    ${CMAKE_BINARY_DIR}/version.h
+    @ONLY
+)
+
+# Add executable. Default name is the project name, version 0.1
 add_executable(dirtyJtag
 		dirtyJtag.c
 		usb_descriptors.c
