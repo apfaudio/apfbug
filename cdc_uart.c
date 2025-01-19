@@ -310,6 +310,16 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
 {
 	struct uart_device *uart;
 
+    /* FIXME: line speed changes breaks bitstream reboot/keyword
+     * detection in specific case where terminal was opened and closed
+     * but USB remains connected (disconnected USB and connected usb
+     * w/terminal open still work).
+     *
+     * https://github.com/apfaudio/apfbug/issues/2
+     *
+     * To sidestep this bug, disallow baudrate changes for now.
+     */
+    /*
 	for (size_t i = 0; i < PIN_UART_INTF_COUNT; i++)
 	{
 		uart = &uart_devices[i];
@@ -321,6 +331,7 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
 			uart_init(uart->inst, line_coding->bit_rate);
 		}
 	}
+    */
 
     // 1200 baud bootloader reentry magic
     if (line_coding->bit_rate == 1200) {
