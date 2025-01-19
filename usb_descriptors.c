@@ -25,6 +25,7 @@
 
 #include "dirtyJtagConfig.h"
 #include "tusb.h"
+#include "version.h"
 #include "get_serial.h"
 
 #if ( USB_CDC_UART_BRIDGE )
@@ -124,11 +125,11 @@ char const *string_desc_arr[] =
     (const char[]){0x09, 0x04},   // 0: is supported language is English (0x0409)
     "apf.audio",                  // 1: Manufacturer
 #if (TILIQUA_HW_MAJOR == 2)
-    "Tiliqua R2 (dbg)",
+    "Tiliqua R2 " GIT_VERSION,
 #elif (TILIQUA_HW_MAJOR == 3)
-    "Tiliqua R3 (dbg)",
+    "Tiliqua R3 " GIT_VERSION,
 #elif (TILIQUA_HW_MAJOR == 4)
-    "Tiliqua R4 (dbg)",
+    "Tiliqua R4 " GIT_VERSION,
 #else
 #error "Unknown TILIQUA_HW_MAJOR"
 #endif
