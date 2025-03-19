@@ -153,6 +153,9 @@ int main()
     usb_serial_init();
     tusb_init();
 
+    gpio_init(PIN_VBUS);
+    gpio_set_dir(PIN_VBUS, GPIO_IN);
+
     led_init( LED_INVERTED, PIN_LED_TX, PIN_LED_RX, PIN_LED_ERROR );
 #if ( USB_CDC_UART_BRIDGE )
     cdc_uart_init( PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );

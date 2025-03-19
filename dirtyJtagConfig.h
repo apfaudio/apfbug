@@ -27,7 +27,10 @@
 // RST  GPIO
 // TRST GPIO
 
+#define PIN_VBUS 22 
+
 #if ( BOARD_TYPE == BOARD_PICO )
+
 
 #define PIN_TDI 16 
 #define PIN_TDO 17
