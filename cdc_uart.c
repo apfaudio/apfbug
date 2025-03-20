@@ -64,6 +64,8 @@ static size_t code_index = 0;
 static bool next_is_cmd = false;
 uint32_t reconfigure = 0;
 
+static bool global_suspended = false;
+
 static uint n_bits(uint n)
 {
 	int i;
@@ -305,13 +307,16 @@ void cdc_uart_task(void) {
             handle_tx_buffer(uart);
         }
     }
+
+    if (global_suspended && (gpio_get(PIN_VBUS) == false)) {
+        // Disconnect!
+        watchdog_reboot(0, 0, 0);
+    }
 }
 
 void tud_suspend_cb(bool remote_wakeup_en)
 {
-    if (!remote_wakeup_en) {
-        watchdog_reboot(0, 0, 0);
-    }
+    global_suspended = !remote_wakeup_en;
 }
 
 void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
