@@ -130,6 +130,8 @@ char const *string_desc_arr[] =
     "Tiliqua R3 " GIT_VERSION,
 #elif (TILIQUA_HW_MAJOR == 4)
     "Tiliqua R4 " GIT_VERSION,
+#elif (TILIQUA_HW_MAJOR == 5)
+    "Tiliqua R5 " GIT_VERSION,
 #else
 #error "Unknown TILIQUA_HW_MAJOR"
 #endif

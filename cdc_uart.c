@@ -348,7 +348,7 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
 
     // 1200 baud bootloader reentry magic
     if (line_coding->bit_rate == 1200) {
-        rom_reset_usb_boot(0, 0);
+        reset_usb_boot(0, 0);
     }
 }
 
