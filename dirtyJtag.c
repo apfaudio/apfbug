@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <hardware/adc.h>
 #include "pico/stdlib.h"
 #include "pico/binary_info.h"
 #include "hardware/pio.h"
@@ -169,9 +170,27 @@ int main()
 #else 
     djtag_init();
 #endif
+
+    adc_init();
+    adc_set_temp_sensor_enabled(true);
+    adc_select_input(4);
+
+    int mod = 0;
     while (1) {
         jtag_main_task();
         fetch_command();//for unicore implementation
+        ++mod;
+        if (mod > 100000) {
+            uint16_t raw = adc_read();
+            const float conversion_factor = 3.3f / (1<<12);
+            float result = raw * conversion_factor;
+            float temp = 27 - (result - 0.706)/0.001721;
+            char buf[128];
+            sprintf(buf, "%fdegC\r\n", temp);
+            tud_cdc_n_write(0, buf, strlen(buf));
+            tud_cdc_n_write_flush(0);
+            mod = 0;
+        }
         if (reconfigure != 0) {
             uint32_t size_out = 0;
             uint8_t* buffer_out = NULL;
