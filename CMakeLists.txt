@@ -70,6 +70,7 @@ target_link_libraries(dirtyJtag PRIVATE pico_stdlib)
 target_link_libraries(dirtyJtag PRIVATE
     hardware_pio
 	hardware_dma
+    hardware_adc
 	pico_unique_id
 	tinyusb_device
 	tinyusb_board
