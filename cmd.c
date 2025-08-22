@@ -57,14 +57,6 @@ enum CommandModifier
   READOUT = 0x80,
 };
 
-enum SignalIdentifier {
-  SIG_TCK = 1 << 1,
-  SIG_TDI = 1 << 2,
-  SIG_TDO = 1 << 3,
-  SIG_TMS = 1 << 4,
-  SIG_TRST = 1 << 5,
-  SIG_SRST = 1 << 6
-};
 
 /**
  * @brief Handle CMD_INFO command
@@ -95,7 +87,6 @@ static void cmd_freq(pio_jtag_inst_t* jtag, const uint8_t *commands);
  * @param usbd_dev USB device
  * @param commands Command data
  */
-static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf);
 
 /**
  * @brief Handle CMD_SETSIG command
@@ -104,7 +95,6 @@ static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool ex
  *
  * @param commands Command data
  */
-static void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands);
 
 /**
  * @brief Handle CMD_GETSIG command
@@ -113,7 +103,7 @@ static void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands);
  * 
  * @param usbd_dev USB device
  */
-static uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer);
+uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer);
 
 /**
  * @brief Handle CMD_CLK command
@@ -124,7 +114,7 @@ static uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer);
  * @param commands Command data
  * @param readout Enable TDO readout
  */
-static uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer);
+uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer);
 /**
  * @brief Handle CMD_SETVOLTAGE command
  *
@@ -262,7 +252,7 @@ static void cmd_freq(pio_jtag_inst_t* jtag, const uint8_t *commands) {
 
 //static uint8_t output_buffer[64];
 
-static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf) {
+uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf) {
   uint16_t transferred_bits;
   uint8_t* output_buffer = 0;
   transferred_bits = commands[1];
@@ -288,7 +278,7 @@ static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool ex
   return (transferred_bits + 7) / 8;
 }
 
-static void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands) {
+void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands) {
   uint8_t signal_mask, signal_status;
 
   signal_mask = commands[1];
@@ -315,7 +305,7 @@ static void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands) {
   }
 }
 
-static uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer)
+uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer)
 {
   uint8_t signal_status = 0;
   
@@ -326,7 +316,7 @@ static uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer)
   return 1;
 }
 
-static uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer)
+uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer)
 {
   uint8_t signals, clk_pulses;
   signals = commands[1];

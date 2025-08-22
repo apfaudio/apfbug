@@ -29,5 +29,21 @@
 
 #include "pio_jtag.h"
 
+// Signal identifiers for cmd_setsig/cmd_getsig
+enum SignalIdentifier {
+  SIG_TCK = 1 << 1,
+  SIG_TDI = 1 << 2,
+  SIG_TDO = 1 << 3,
+  SIG_TMS = 1 << 4,
+  SIG_TRST = 1 << 5,
+  SIG_SRST = 1 << 6
+};
+
 bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number);
 uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host);
+
+// Expose individual command functions for direct use
+uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf);
+void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands);
+uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer);
+uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer);
