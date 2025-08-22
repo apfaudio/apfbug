@@ -5,21 +5,6 @@
 
 static jtag_tap_state_t current_state = STATE_TEST_LOGIC_RESET;
 
-const struct device_id_pair ecp5_devices[] = {
-    {"LFE5U-12",    0x21111043},
-    {"LFE5U-25",    0x41111043},
-    {"LFE5U-45",    0x41112043},
-    {"LFE5U-85",    0x41113043},
-    {"LFE5UM-25",   0x01111043},
-    {"LFE5UM-45",   0x01112043},
-    {"LFE5UM-85",   0x01113043},
-    {"LFE5UM5G-25", 0x81111043},
-    {"LFE5UM5G-45", 0x81112043},
-    {"LFE5UM5G-85", 0x81113043}
-};
-
-const int ecp5_device_count = sizeof(ecp5_devices) / sizeof(ecp5_devices[0]);
-
 static const uint8_t tms_transitions[] = {
     0x01, 0xFD, 0xE3, 0xE7, 0xEF, 0x0F, 0xBF, 0x0F,
     0xFD, 0xFF, 0x3F, 0x7F, 0x7F, 0xFF, 0x7F, 0xFD

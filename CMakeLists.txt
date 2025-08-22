@@ -53,6 +53,7 @@ add_executable(dirtyJtag
         led.c
         ecp5_jtag.c
         raw_bitstreams.c
+        lattice_cmds.c
 )
 
 target_include_directories(dirtyJtag PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -34,6 +34,7 @@
 #include "cmd.h"
 
 #include "ecp5_jtag.h"
+#include "lattice_cmds.h"
 
 enum CommandIdentifier {
   CMD_STOP = 0x00,
@@ -228,8 +229,8 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number) 
     uint32_t device_id = ecp5_jtag_read_id(jtag);
     
     bool device_found = false;
-    for (int i = 0; i < ecp5_device_count; i++) {
-        if (ecp5_devices[i].device_id == device_id) {
+    for (int i = 0; i < ecp_device_count; i++) {
+        if (ecp_devices[i].device_id == device_id) {
             device_found = true;
             break;
         }
