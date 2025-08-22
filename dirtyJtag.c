@@ -268,11 +268,7 @@ int main()
             mod = 0;
         }
         if (reconfigure != 0) {
-            uint32_t size_out = 0;
-            uint8_t* buffer_out = NULL;
-            if (cmd_data_for_index((reconfigure-1), &size_out, &buffer_out)) {
-                replay_compressed_jtag_sequence(size_out, buffer_out);
-            }
+            load_bitstream_by_number(&jtag, reconfigure);
             reconfigure = 0;
         }
     }

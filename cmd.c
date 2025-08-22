@@ -33,16 +33,7 @@
 #include "pio_jtag.h"
 #include "cmd.h"
 
-#include "heatshrink_decoder.h"
-
-// These files contain compressed ROM arrays of JTAG
-// commands required to flash bootloader stubs.
-// TODO: document how to record these!
-#if (TILIQUA_HW_MAJOR == 2)
-#include "bitstreams/bitstreams_sc2.c"
-#else
-#include "bitstreams/bitstreams_sc3.c"
-#endif
+#include "ecp5_jtag.h"
 
 enum CommandIdentifier {
   CMD_STOP = 0x00,
@@ -149,8 +140,6 @@ static void cmd_setvoltage(const uint8_t *commands);
  */
 static void cmd_gotobootloader(void);
 
-static heatshrink_decoder hsd;
-
 uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host) {
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
@@ -227,84 +216,36 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
   return commands - rxbuf;
 }
 
-#define DECOMPRESSION_BUF_SZ 2048
-#define FAKE_TX_BUF_SZ       1024
-#define HANDLE_WATER         256
-#define HANDLE_MAX           128
-
 extern pio_jtag_inst_t jtag;
 
-uint8_t decompression_buf[DECOMPRESSION_BUF_SZ];
-uint8_t fake_tx_buf[FAKE_TX_BUF_SZ];
-
-void replay_compressed_jtag_sequence(uint32_t cmd_buffer_sunk, uint8_t *cmd_buffer) {
-
-    if (cmd_buffer_sunk < 1000) {
-        return;
+bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number) {
+    if (bitstream_number == 0 || bitstream_number > bitstream_count) {
+        return false;
     }
-
-    heatshrink_decoder_reset(&hsd);
-    uint32_t compressed_size = cmd_buffer_sunk;
-    size_t sunk = 0;
-    size_t bytes_in_decomp = 0;
-    size_t bytes_total_decomp = 0;
-    size_t total_handled = 0;
-    bool abort = false;
-    while (sunk < compressed_size && !abort) {
-
-        // Read from saved command buffer
-        size_t scount = 0;
-        heatshrink_decoder_sink(&hsd, &cmd_buffer[sunk],
-                                compressed_size - sunk, &scount);
-        sunk += scount;
-
-        if (sunk == compressed_size) {
-            heatshrink_decoder_finish(&hsd);
+    
+    const struct bitstream_info* bitstream = &bitstreams[bitstream_number - 1];
+    
+    uint32_t device_id = ecp5_jtag_read_id(jtag);
+    
+    bool device_found = false;
+    for (int i = 0; i < ecp5_device_count; i++) {
+        if (ecp5_devices[i].device_id == device_id) {
+            device_found = true;
+            break;
         }
-
-        // Decompress as much as we can from what we just sunk.
-        HSD_poll_res pres;
-        do {
-            size_t pcount = 0;
-            pres = heatshrink_decoder_poll(
-                &hsd, &decompression_buf[bytes_in_decomp],
-                DECOMPRESSION_BUF_SZ - bytes_in_decomp, &pcount);
-            bytes_in_decomp += pcount;
-            bytes_total_decomp += pcount;
-        } while (pres == HSDR_POLL_MORE);
-
-        // If we have a lot of decompressed commands pending, handle them until it's less than HANDLE_WATER
-        while (bytes_in_decomp >= HANDLE_WATER) {
-            size_t n_handled = cmd_handle(&jtag, decompression_buf, HANDLE_MAX, fake_tx_buf, true);
-
-            if (n_handled > bytes_in_decomp) {
-                abort = true;
-                break;
-            }
-
-            // Can't rely on memcpy copy order!
-            for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
-                (decompression_buf)[i] = (decompression_buf + n_handled)[i];
-            }
-
-
-            bytes_in_decomp -= n_handled;
-            total_handled += n_handled;
-        }
-
     }
-
-    while (bytes_in_decomp > 0 && !abort) {
-        size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], bytes_in_decomp, fake_tx_buf, true);
-
-        for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
-            (decompression_buf)[i] = (decompression_buf + n_handled)[i];
-        }
-
-        bytes_in_decomp -= n_handled;
-        total_handled += n_handled;
-
+    
+    if (!device_found) {
+        return false;
     }
+    
+    ecp5_jtag_enable_config(jtag);
+    ecp5_jtag_erase(jtag);
+    ecp5_jtag_load_bitstream(jtag, bitstream->data, bitstream->size);
+    ecp5_jtag_disable_config(jtag);
+    ecp5_jtag_refresh(jtag);
+    
+    return true;
 }
 
 
