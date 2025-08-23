@@ -134,9 +134,26 @@ static void cmd_gotobootloader(void);
 uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host) {
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
+  
+  // Log command buffer (first 8 bytes only)
+  if (!local_host) {
+    char log_msg[512];
+    int pos = sprintf(log_msg, "[BUF] ");
+    for (uint32_t i = 0; i < count; i++) {
+      pos += sprintf(log_msg + pos, "%02X ", rxbuf[i]);
+    }
+    pos += sprintf(log_msg + pos, "\r\n");
+    tud_cdc_n_write(0, log_msg, pos);
+    tud_cdc_n_write_flush(0);
+  }
+  
   while ((commands < (rxbuf + count)) && (*commands != CMD_STOP))
   {
-    switch ((*commands)&0x0F) {
+    uint8_t cmd_byte = *commands;
+    uint8_t cmd_type = cmd_byte & 0x0F;
+    
+    
+    switch (cmd_type) {
     case CMD_INFO:
     {
         if (!local_host) {
@@ -153,7 +170,26 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
     case CMD_XFER:
     {
       bool no_read = *commands & NO_READ;
-      uint32_t trbytes = cmd_xfer(jtag, commands, *commands & EXTEND_LENGTH, no_read, output_buffer);
+      bool extend_length = *commands & EXTEND_LENGTH;
+      uint16_t bits = commands[1];
+      if (extend_length) bits += 256;
+      uint32_t data_bytes = (bits + 7) / 8;
+      
+      uint32_t trbytes = cmd_xfer(jtag, commands, extend_length, no_read, output_buffer);
+      
+      // Log concise XFER info
+      if (!local_host) {
+        char log[64];
+        int pos = sprintf(log, "[XFER] %ub", bits);
+        if (!no_read && trbytes > 0) {
+          pos += sprintf(log + pos, " -> %02X %02X %02X %02X", 
+                        output_buffer[0], output_buffer[1], output_buffer[2], output_buffer[3]);
+        }
+        pos += sprintf(log + pos, "\r\n");
+        tud_cdc_n_write(0, log, pos);
+        tud_cdc_n_write_flush(0);
+      }
+      
       commands += 1 + trbytes;
       output_buffer += (no_read ? 0 : trbytes);
       break;
@@ -244,9 +280,20 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, 
 
 
 static uint32_t cmd_info(uint8_t *buffer) {
-  char info_string[10] = "DJTAG2\n";
-  memcpy(buffer, info_string, 10);
-  return 10;
+  // Read device ID and include it in the info response
+  extern pio_jtag_inst_t jtag;
+  uint32_t device_id = ecp5_jtag_read_id(&jtag);
+  
+  // Also print to serial port for debugging
+  char serial_msg[64];
+  int serial_len = sprintf(serial_msg, "[INFO] Device ID: 0x%08X\r\n", device_id);
+  tud_cdc_n_write(0, serial_msg, serial_len);
+  tud_cdc_n_write_flush(0);
+  
+  char info_string[64];
+  int len = sprintf(info_string, "DJTAG2 ID:0x%08X\n", device_id);
+  memcpy(buffer, info_string, len);
+  return len;
 }
 
 static void cmd_freq(pio_jtag_inst_t* jtag, const uint8_t *commands) {

@@ -4,6 +4,29 @@
 #include <string.h>
 #include <stdlib.h>
 
+// TODO: deduplicate
+
+enum CommandIdentifier {
+  CMD_STOP = 0x00,
+  CMD_INFO = 0x01,
+  CMD_FREQ = 0x02,
+  CMD_XFER = 0x03,
+  CMD_SETSIG = 0x04,
+  CMD_GETSIG = 0x05,
+  CMD_CLK = 0x06,
+  CMD_SETVOLTAGE = 0x07,
+  CMD_GOTOBOOTLOADER = 0x08
+};
+
+enum CommandModifier
+{
+  // CMD_XFER
+  NO_READ = 0x80,
+  EXTEND_LENGTH = 0x40,
+  // CMD_CLK
+  READOUT = 0x80,
+};
+
 // Use dirtyJtag command infrastructure for all JTAG operations
 
 // Send JTAG instruction (8 bits to IR)
@@ -106,39 +129,67 @@ static void ecp5_send_data(pio_jtag_inst_t* jtag, const uint8_t* data, uint32_t 
 }
 
 uint32_t ecp5_jtag_read_id(pio_jtag_inst_t* jtag) {
-    // Use the DirtyJTAG command infrastructure exactly as intended
-    // Build a command sequence that mimics the SVF: SIR 8 TDI (E0); SDR 32
+    // Match exactly what openFPGALoader does - complete SETSIG sequence + 2 XFERs
+
+    /*
+[BUF] 01 00                                                                                                                             
+[INFO] Device ID: 0x41111043                                                                                                                 
+[BUF] 02 17 70 00 
+[BUF] 04 12 10 04 12 12 04 12 10 04 12 12 04 12 10 04 12 12 04 12 10 04 12 12 04 12 10 0
+[BUF] 04 12 00 04 12 02 04 12 10 04 12 12 04 12 00 04 12 02 04 12 00 04 12 02 04 12 00 0
+[BUF] 03 20 FF FF FF FF 
+[XFER] 32b -> C2 08 88 82
+[BUF] 03 20 FF FF FF FF 
+[XFER] 32b -> FF FF FF FF
+[BUF] 04 12 10 04 12 12 04 12 10 04 12 12 04 12 10 04 12 12 04 12 10 04 12 12 04 12 10 0
+*/
+
+    // First SETSIG sequence - exactly matching openFPGALoader
+    uint8_t setsig1[] = {
+        0x04, 0x12, 0x10, 0x04, 0x12, 0x12, 0x04, 0x12, 0x10, 0x04, 0x12, 0x12, 
+        0x04, 0x12, 0x10, 0x04, 0x12, 0x12, 0x04, 0x12, 0x10, 0x04, 0x12, 0x12, 
+        0x04, 0x12, 0x10, 0x04, 0x12, 0x12, 0x04, 0x12, 0x10, 0x04, 0x12, 0x12, 
+        0x04, 0x12, 0x10, 0x00
+    };
+    uint8_t dummy1[16];
+    cmd_handle(jtag, setsig1, sizeof(setsig1), dummy1, true);
     
-    uint8_t command_buffer[16];
-    uint8_t response_buffer[16];
-    uint8_t* cmd_ptr = command_buffer;
+    // Second SETSIG sequence - exactly matching openFPGALoader  
+    uint8_t setsig2[] = {
+        0x04, 0x12, 0x00, 0x04, 0x12, 0x02, 0x04, 0x12, 0x10, 0x04, 0x12, 0x12, 
+        0x04, 0x12, 0x00, 0x04, 0x12, 0x02, 0x04, 0x12, 0x00, 0x04, 0x12, 0x02, 
+        0x04, 0x12, 0x00, 0x00
+    };
+    uint8_t dummy2[16];
+    cmd_handle(jtag, setsig2, sizeof(setsig2), dummy2, true);
     
-    // CMD_XFER for sending READ_ID instruction (8 bits) - with NO_READ flag
-    *cmd_ptr++ = CMD_XFER | NO_READ; // CMD_XFER | NO_READ
-    *cmd_ptr++ = 8;                  // 8 bits
-    *cmd_ptr++ = READ_ID;            // 0xE0
+    // First XFER - this should return the IDCODE (C2 08 88 82)
+    uint8_t xfer1[] = {0x03, 0x20, 0xFF, 0xFF, 0xFF, 0xFF};
+    uint8_t response1[16];
+    cmd_handle(jtag, xfer1, sizeof(xfer1), response1, true);
     
-    // CMD_XFER for reading 32-bit IDCODE  
-    *cmd_ptr++ = CMD_XFER;           // CMD_XFER
-    *cmd_ptr++ = 32;                 // 32 bits
-    *cmd_ptr++ = 0x00;               // dummy data
-    *cmd_ptr++ = 0x00;
-    *cmd_ptr++ = 0x00;
-    *cmd_ptr++ = 0x00;
+    // Second XFER - openFPGALoader does this too
+    uint8_t xfer2[] = {0x03, 0x20, 0xFF, 0xFF, 0xFF, 0xFF};  
+    uint8_t response2[16];
+    cmd_handle(jtag, xfer2, sizeof(xfer2), response2, true);
     
-    // CMD_STOP
-    *cmd_ptr++ = CMD_STOP;
+    // Bit-reverse each byte since JTAG shifts LSB-first
+    uint8_t reversed[4];
+    for (int i = 0; i < 4; i++) {
+        uint8_t byte = response1[i];
+        uint8_t rev = 0;
+        for (int j = 0; j < 8; j++) {
+            rev = (rev << 1) | (byte & 1);
+            byte >>= 1;
+        }
+        reversed[i] = rev;
+    }
     
-    // Execute the command sequence using cmd_handle 
-    uint32_t cmd_len = cmd_ptr - command_buffer;
-    cmd_handle(jtag, command_buffer, cmd_len, response_buffer, true);
-    
-    // The response should contain the 4 bytes of IDCODE
-    // Extract from response buffer (skip any command headers)
-    uint32_t idcode = (response_buffer[0] << 0) | 
-                      (response_buffer[1] << 8) | 
-                      (response_buffer[2] << 16) | 
-                      (response_buffer[3] << 24);
+    // Now assemble the properly bit-reversed IDCODE
+    uint32_t idcode = (reversed[0] << 0) | 
+                      (reversed[1] << 8) | 
+                      (reversed[2] << 16) | 
+                      (reversed[3] << 24);
     
     return idcode;
 }
