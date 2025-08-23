@@ -1,4 +1,4 @@
-#include "ecp5_jtag.h"
+#include "openfpgaloader.h"
 
 // Auto-generated raw bitstream data
 // Generated with bitstream_to_c.py

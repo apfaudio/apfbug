@@ -11,7 +11,7 @@
 #include "tusb.h"
 #include "cmd.h"
 #include "get_serial.h"
-#include "ecp5_jtag.h"
+#include "openfpgaloader.h"
 
 #include "dirtyJtagConfig.h"
 

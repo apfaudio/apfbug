@@ -35,7 +35,7 @@ def bitstream_to_c_array(filename, var_name):
 
 def generate_header():
     """Generate the file header."""
-    return '''#include "ecp5_jtag.h"
+    return '''#include "openfpgaloader.h"
 
 // Auto-generated raw bitstream data
 // Generated with bitstream_to_c.py

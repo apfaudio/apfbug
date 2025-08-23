@@ -51,7 +51,7 @@ add_executable(dirtyJtag
 		get_serial.c
 		cmd.c
         led.c
-        ecp5_jtag.c
+        openfpgaloader.c
         raw_bitstreams.c
         lattice_cmds.c
 )

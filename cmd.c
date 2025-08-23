@@ -33,7 +33,7 @@
 #include "pio_jtag.h"
 #include "cmd.h"
 
-#include "ecp5_jtag.h"
+#include "openfpgaloader.h"
 #include "lattice_cmds.h"
 
 enum CommandIdentifier {
