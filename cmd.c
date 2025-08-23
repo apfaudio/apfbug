@@ -246,17 +246,11 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
 extern pio_jtag_inst_t jtag;
 
 bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out) {
-    if (bitstream_number == 0 || bitstream_number > bitstream_count) {
-        return false;
-    }
-    
-    const struct bitstream_info* bitstream = &bitstreams[bitstream_number - 1];
-    
+    const struct bitstream_info* bitstream = &bitstreams[0];
     uint32_t device_id = ecp5_jtag_read_id(jtag);
     if (device_id_out) {
         *device_id_out = device_id;
     }
-    
     bool device_found = false;
     for (int i = 0; i < ecp_device_count; i++) {
         if (ecp_devices[i].device_id == device_id) {
@@ -264,17 +258,14 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, 
             break;
         }
     }
-    
     if (!device_found) {
         return false;
     }
-    
     ecp5_jtag_enable_config(jtag);
     ecp5_jtag_erase(jtag);
     ecp5_jtag_load_bitstream(jtag, bitstream->data, bitstream->size);
     ecp5_jtag_disable_config(jtag);
     ecp5_jtag_refresh(jtag);
-    
     return true;
 }
 

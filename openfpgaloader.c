@@ -356,6 +356,7 @@ int jtag_shift_dr(const uint8_t *tdi, unsigned char *tdo, int drlen, tap_state_t
 	return 0;
 }
 
+
 void dirtyjtag_toggle_clk(uint8_t tms, uint8_t tdi, uint32_t clk_len)
 {
 	int actual_length;
@@ -372,6 +373,13 @@ void dirtyjtag_toggle_clk(uint8_t tms, uint8_t tdi, uint32_t clk_len)
         cmd_handle(_jtag, buf, 4, NULL, true);
 		clk_len -= buf[2];
 	}
+}
+
+void dirtyjtag_idle_clocks(int nb)
+{
+	unsigned char c = (TEST_LOGIC_RESET == _state) ? 1 : 0;
+	jtag_flush_tms(false);
+	dirtyjtag_toggle_clk(c, 0, nb);
 }
 
 #define OPTIONS_NO_READ 0
@@ -523,23 +531,6 @@ int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 	return EXIT_SUCCESS;
 }
 
-// Generate idle clocks
-void jtag_go_idle_clocks(pio_jtag_inst_t* jtag, int clocks) {
-    uint8_t cmd_buf[4];
-    cmd_buf[0] = CMD_CLK;
-    cmd_buf[1] = 0;  // TMS=0, TDI=0 (idle state)
-    
-    while (clocks > 0) {
-        int clk_chunk = (clocks > 255) ? 255 : clocks;
-        cmd_buf[2] = clk_chunk;
-        cmd_buf[3] = CMD_STOP;
-        
-        uint8_t dummy[4];
-        cmd_handle(jtag, cmd_buf, 4, dummy, true);
-        clocks -= clk_chunk;
-    }
-}
-
 // Core Lattice function: write/read operation
 // Direct port of openFPGALoader's Lattice::wr_rd function
 bool lattice_wr_rd(pio_jtag_inst_t* jtag, uint8_t cmd, 
@@ -589,7 +580,7 @@ bool lattice_poll_busy_flag(pio_jtag_inst_t* jtag) {
     do {
         if (!lattice_wr_rd(jtag, LSC_CHECK_BUSY, NULL, 0, &rx, 1))
             return false;
-        jtag_go_idle_clocks(jtag, 100);  // Some idle clocks
+        dirtyjtag_idle_clocks(100);  // Some idle clocks
         if (timeout == 100000) {
             return false;  // timeout
         } else {
@@ -627,7 +618,7 @@ void ecp5_jtag_enable_config(pio_jtag_inst_t* jtag) {
     uint8_t flash_mode = 0x00;
     lattice_wr_rd(jtag, ISC_ENABLE, &flash_mode, 1, NULL, 0);
     
-    jtag_go_idle_clocks(jtag, 1000);
+    dirtyjtag_idle_clocks(1000);
     lattice_poll_busy_flag(jtag);
 }
 
@@ -635,7 +626,7 @@ void ecp5_jtag_disable_config(pio_jtag_inst_t* jtag) {
     // Direct port of Lattice::DisableISC()
     lattice_wr_rd(jtag, ISC_DISABLE, NULL, 0, NULL, 0);
     
-    jtag_go_idle_clocks(jtag, 1000);
+    dirtyjtag_idle_clocks(1000);
     lattice_poll_busy_flag(jtag);
 }
 
@@ -644,7 +635,7 @@ void ecp5_jtag_erase(pio_jtag_inst_t* jtag) {
     uint8_t erase_op = FLASH_ERASE_SRAM;  // Erase SRAM only
     lattice_wr_rd(jtag, ISC_ERASE, &erase_op, 1, NULL, 0);
     
-    jtag_go_idle_clocks(jtag, 1000);
+    dirtyjtag_idle_clocks(1000);
     lattice_poll_busy_flag(jtag);
 }
 
@@ -664,12 +655,12 @@ void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_da
     // Step 1: LSC_INIT_ADDRESS (0x46) - Initialize address pointer
     if (!lattice_wr_rd(jtag, 0x46, NULL, 0, NULL, 0))
         return;
-    jtag_go_idle_clocks(jtag, 1000);
+    dirtyjtag_idle_clocks(1000);
     
     // Step 2: LSC_BITSTREAM_BURST (0x7A) - Enter bitstream mode
     if (!lattice_wr_rd(jtag, LSC_BITSTREAM_BURST, NULL, 0, NULL, 0))
         return;
-    jtag_go_idle_clocks(jtag, 2);
+    dirtyjtag_idle_clocks(2);
     
     // Step 3: Send bitstream data in chunks with byte reversal
     const uint32_t chunk_size = 1024;  // Use 1024 bytes like openFPGALoader
@@ -694,13 +685,13 @@ void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_da
     free(tmp_buffer);
     
     // Step 4: Final idle clocks and return to RUN_TEST_IDLE
-    jtag_go_idle_clocks(jtag, 1000);
+    dirtyjtag_idle_clocks(1000);
 }
 
 void ecp5_jtag_refresh(pio_jtag_inst_t* jtag) {
     // Direct port of Lattice::loadConfiguration()
     lattice_wr_rd(jtag, LSC_REFRESH, NULL, 0, NULL, 0);
     
-    jtag_go_idle_clocks(jtag, 1000);
+    dirtyjtag_idle_clocks(1000);
     lattice_poll_busy_flag(jtag);
 }
