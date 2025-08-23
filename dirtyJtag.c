@@ -243,6 +243,8 @@ int main()
 
     setup_slave();
 
+    jtag_init(&jtag);
+
     int mod = 0;
     while (1) {
         jtag_main_task();

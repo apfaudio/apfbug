@@ -55,8 +55,8 @@ typedef enum {
     UPDATE_IR = 15,
 } tap_state_t;
 
-#define OPTIONS_NO_READ 0
-#define OPTIONS_MAX_BITS 128
+#define OPTIONS_NO_READ 0x80
+#define OPTIONS_MAX_BITS 240
 #define TMS_BUFFER_SZ 128
 
 static pio_jtag_inst_t* _jtag;
