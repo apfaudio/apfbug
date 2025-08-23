@@ -218,7 +218,7 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
 
 extern pio_jtag_inst_t jtag;
 
-bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out) {
+bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out, uint64_t* status_out) {
     const struct bitstream_info* bitstream = &bitstreams[0];
     uint32_t device_id = ecp5_jtag_read_id(jtag);
     if (device_id_out) {
@@ -237,6 +237,13 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, 
     ecp5_jtag_enable_config(jtag);
     ecp5_jtag_erase(jtag);
     ecp5_jtag_load_bitstream(jtag, bitstream->data, bitstream->size);
+    
+    // Read status register after bitstream loading
+    uint64_t status = ecp5_jtag_read_status(jtag);
+    if (status_out) {
+        *status_out = status;
+    }
+    
     ecp5_jtag_disable_config(jtag);
     ecp5_jtag_refresh(jtag);
     return true;

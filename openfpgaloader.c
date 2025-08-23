@@ -550,6 +550,7 @@ bool ecp5_jtag_check_busy(pio_jtag_inst_t* jtag) {
     uint8_t rx;
     if (!lattice_wr_rd(jtag, LSC_CHECK_BUSY, NULL, 0, &rx, 1))
         return true;  // Assume busy on error
+	jtag_set_state(RUN_TEST_IDLE);
     return (rx & 1) != 0;
 }
 
@@ -557,7 +558,7 @@ void ecp5_jtag_enable_config(pio_jtag_inst_t* jtag) {
     // Direct port of Lattice::EnableISC(0x00)
     uint8_t flash_mode = 0x00;
     lattice_wr_rd(jtag, ISC_ENABLE, &flash_mode, 1, NULL, 0);
-    
+	jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
     lattice_poll_busy_flag(jtag);
 }
@@ -565,7 +566,7 @@ void ecp5_jtag_enable_config(pio_jtag_inst_t* jtag) {
 void ecp5_jtag_disable_config(pio_jtag_inst_t* jtag) {
     // Direct port of Lattice::DisableISC()
     lattice_wr_rd(jtag, ISC_DISABLE, NULL, 0, NULL, 0);
-    
+	jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
     lattice_poll_busy_flag(jtag);
 }
@@ -574,7 +575,7 @@ void ecp5_jtag_erase(pio_jtag_inst_t* jtag) {
     // Direct port of SRAM erase from openFPGALoader
     uint8_t erase_op = FLASH_ERASE_SRAM;  // Erase SRAM only
     lattice_wr_rd(jtag, ISC_ERASE, &erase_op, 1, NULL, 0);
-    
+	jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
     lattice_poll_busy_flag(jtag);
 }
@@ -595,11 +596,13 @@ void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_da
     // Step 1: LSC_INIT_ADDRESS (0x46) - Initialize address pointer
     if (!lattice_wr_rd(jtag, 0x46, NULL, 0, NULL, 0))
         return;
+    jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
     
     // Step 2: LSC_BITSTREAM_BURST (0x7A) - Enter bitstream mode
     if (!lattice_wr_rd(jtag, LSC_BITSTREAM_BURST, NULL, 0, NULL, 0))
         return;
+    jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(2);
     
     // Step 3: Send bitstream data in chunks with byte reversal
@@ -624,14 +627,31 @@ void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_da
     
     free(tmp_buffer);
     
-    // Step 4: Final idle clocks and return to RUN_TEST_IDLE
+    // Step 4: Final idle clocks and status check like reference
+    jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
+    
+    // Step 5: Send final command (0xff) like reference  
+    lattice_wr_rd(jtag, 0xff, NULL, 0, NULL, 0);
+}
+
+uint64_t ecp5_jtag_read_status(pio_jtag_inst_t* jtag) {
+    uint8_t status_buf[8];
+    memset(status_buf, 0, 8);
+    lattice_wr_rd(jtag, 0x3C, NULL, 0, status_buf, 8); // READ_STATUS_REGISTER - 64 bits
+    jtag_set_state(RUN_TEST_IDLE);
+    
+    // Parse 64-bit status register like reference
+    uint64_t status_reg = (uint64_t)status_buf[7] << 56 | (uint64_t)status_buf[6] << 48 | 
+                         (uint64_t)status_buf[5] << 40 | (uint64_t)status_buf[4] << 32 | 
+                         status_buf[3] << 24 | status_buf[2] << 16 | status_buf[1] << 8 | status_buf[0];
+    return status_reg;
 }
 
 void ecp5_jtag_refresh(pio_jtag_inst_t* jtag) {
     // Direct port of Lattice::loadConfiguration()
     lattice_wr_rd(jtag, LSC_REFRESH, NULL, 0, NULL, 0);
-    
+	jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
     lattice_poll_busy_flag(jtag);
 }

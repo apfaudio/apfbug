@@ -43,6 +43,7 @@ void ecp5_jtag_disable_config(pio_jtag_inst_t* jtag);
 void ecp5_jtag_erase(pio_jtag_inst_t* jtag);
 void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_data, uint32_t size);
 void ecp5_jtag_refresh(pio_jtag_inst_t* jtag);
+uint64_t ecp5_jtag_read_status(pio_jtag_inst_t* jtag);
 
 // Core implementation functions
 bool lattice_wr_rd(pio_jtag_inst_t* jtag, uint8_t cmd, 

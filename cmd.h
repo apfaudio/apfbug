@@ -39,7 +39,7 @@ enum SignalIdentifier {
   SIG_SRST = 1 << 6
 };
 
-bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out);
+bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out, uint64_t* status_out);
 uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host);
 
 // Expose individual command functions for direct use

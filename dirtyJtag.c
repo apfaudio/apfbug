@@ -272,10 +272,11 @@ int main()
         }
         if (reconfigure != 0) {
             uint32_t device_id;
-            bool success = load_bitstream_by_number(&jtag, reconfigure, &device_id);
-            char device_id_msg[80];
+            uint64_t status;
+            bool success = load_bitstream_by_number(&jtag, reconfigure, &device_id, &status);
+            char device_id_msg[120];
             if (success) {
-                sprintf(device_id_msg, "Device ID: 0x%08X loaded bitstream %u\r\n", device_id, reconfigure);
+                sprintf(device_id_msg, "Device ID: 0x%08X loaded bitstream %u, Status: 0x%016llx\r\n", device_id, reconfigure, status);
             } else {
                 sprintf(device_id_msg, "Failed to load bitstream %u (Device ID: 0x%08X)\r\n", reconfigure, device_id);
             }
