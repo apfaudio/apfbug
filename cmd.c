@@ -209,7 +209,7 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
 
 extern pio_jtag_inst_t jtag;
 
-bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number) {
+bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out) {
     if (bitstream_number == 0 || bitstream_number > bitstream_count) {
         return false;
     }
@@ -217,6 +217,9 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number) 
     const struct bitstream_info* bitstream = &bitstreams[bitstream_number - 1];
     
     uint32_t device_id = ecp5_jtag_read_id(jtag);
+    if (device_id_out) {
+        *device_id_out = device_id;
+    }
     
     bool device_found = false;
     for (int i = 0; i < ecp_device_count; i++) {

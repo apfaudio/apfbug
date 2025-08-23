@@ -11,6 +11,7 @@
 #include "tusb.h"
 #include "cmd.h"
 #include "get_serial.h"
+#include "ecp5_jtag.h"
 
 #include "dirtyJtagConfig.h"
 
@@ -268,7 +269,16 @@ int main()
             mod = 0;
         }
         if (reconfigure != 0) {
-            load_bitstream_by_number(&jtag, reconfigure);
+            uint32_t device_id;
+            bool success = load_bitstream_by_number(&jtag, reconfigure, &device_id);
+            char device_id_msg[80];
+            if (success) {
+                sprintf(device_id_msg, "Device ID: 0x%08X loaded bitstream %u\r\n", device_id, reconfigure);
+            } else {
+                sprintf(device_id_msg, "Failed to load bitstream %u (Device ID: 0x%08X)\r\n", reconfigure, device_id);
+            }
+            tud_cdc_n_write(0, device_id_msg, strlen(device_id_msg));
+            tud_cdc_n_write_flush(0);
             reconfigure = 0;
         }
     }

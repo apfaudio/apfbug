@@ -106,17 +106,41 @@ static void ecp5_send_data(pio_jtag_inst_t* jtag, const uint8_t* data, uint32_t 
 }
 
 uint32_t ecp5_jtag_read_id(pio_jtag_inst_t* jtag) {
-    // Send READ_ID instruction
-    ecp5_send_instruction(jtag, READ_ID);
+    // Use the DirtyJTAG command infrastructure exactly as intended
+    // Build a command sequence that mimics the SVF: SIR 8 TDI (E0); SDR 32
     
-    // Read 32-bit ID from DR
-    uint8_t dummy_data[4] = {0};
-    uint8_t id_bytes[4];
-    ecp5_send_data(jtag, dummy_data, 32, id_bytes);
+    uint8_t command_buffer[16];
+    uint8_t response_buffer[16];
+    uint8_t* cmd_ptr = command_buffer;
     
-    // Convert to uint32_t (little-endian)
-    uint32_t id = (id_bytes[3] << 24) | (id_bytes[2] << 16) | (id_bytes[1] << 8) | id_bytes[0];
-    return id;
+    // CMD_XFER for sending READ_ID instruction (8 bits) - with NO_READ flag
+    *cmd_ptr++ = CMD_XFER | NO_READ; // CMD_XFER | NO_READ
+    *cmd_ptr++ = 8;                  // 8 bits
+    *cmd_ptr++ = READ_ID;            // 0xE0
+    
+    // CMD_XFER for reading 32-bit IDCODE  
+    *cmd_ptr++ = CMD_XFER;           // CMD_XFER
+    *cmd_ptr++ = 32;                 // 32 bits
+    *cmd_ptr++ = 0x00;               // dummy data
+    *cmd_ptr++ = 0x00;
+    *cmd_ptr++ = 0x00;
+    *cmd_ptr++ = 0x00;
+    
+    // CMD_STOP
+    *cmd_ptr++ = CMD_STOP;
+    
+    // Execute the command sequence using cmd_handle 
+    uint32_t cmd_len = cmd_ptr - command_buffer;
+    cmd_handle(jtag, command_buffer, cmd_len, response_buffer, true);
+    
+    // The response should contain the 4 bytes of IDCODE
+    // Extract from response buffer (skip any command headers)
+    uint32_t idcode = (response_buffer[0] << 0) | 
+                      (response_buffer[1] << 8) | 
+                      (response_buffer[2] << 16) | 
+                      (response_buffer[3] << 24);
+    
+    return idcode;
 }
 
 bool ecp5_jtag_check_busy(pio_jtag_inst_t* jtag) {
