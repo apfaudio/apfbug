@@ -34,25 +34,6 @@ struct bitstream_info {
     uint32_t size;
 };
 
-// JTAG TAP States
-typedef enum {
-    TAP_TEST_LOGIC_RESET = 0,
-    TAP_RUN_TEST_IDLE = 1,
-    TAP_SELECT_DR_SCAN = 2,
-    TAP_CAPTURE_DR = 3,
-    TAP_SHIFT_DR = 4,
-    TAP_EXIT1_DR = 5,
-    TAP_PAUSE_DR = 6,
-    TAP_EXIT2_DR = 7,
-    TAP_UPDATE_DR = 8,
-    TAP_SELECT_IR_SCAN = 9,
-    TAP_CAPTURE_IR = 10,
-    TAP_SHIFT_IR = 11,
-    TAP_EXIT1_IR = 12,
-    TAP_PAUSE_IR = 13,
-    TAP_EXIT2_IR = 14,
-    TAP_UPDATE_IR = 15,
-} tap_state_t;
 
 // High-level Lattice ECP5 operations (replaces old ecp5_jtag.h interface)
 uint32_t ecp5_jtag_read_id(pio_jtag_inst_t* jtag);
@@ -68,10 +49,9 @@ bool lattice_wr_rd(pio_jtag_inst_t* jtag, uint8_t cmd,
                    const uint8_t* tx, int tx_len, 
                    uint8_t* rx, int rx_len);
 bool lattice_poll_busy_flag(pio_jtag_inst_t* jtag);
-bool jtag_shift_ir(pio_jtag_inst_t* jtag, uint8_t instruction, tap_state_t end_state);
-bool jtag_shift_dr(pio_jtag_inst_t* jtag, const uint8_t* tx_data, uint8_t* rx_data, 
-                   int bits, tap_state_t end_state);
 void jtag_go_idle_clocks(pio_jtag_inst_t* jtag, int clocks);
+
+void jtag_init(pio_jtag_inst_t* jtag);
 
 // Bitstream data (defined in raw_bitstreams.c)
 extern const struct bitstream_info bitstreams[];

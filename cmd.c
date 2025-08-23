@@ -282,6 +282,7 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, 
 static uint32_t cmd_info(uint8_t *buffer) {
   // Read device ID and include it in the info response
   extern pio_jtag_inst_t jtag;
+  jtag_init(&jtag);
   uint32_t device_id = ecp5_jtag_read_id(&jtag);
   
   // Also print to serial port for debugging
