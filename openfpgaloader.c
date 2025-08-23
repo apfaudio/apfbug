@@ -55,6 +55,8 @@ typedef enum {
     UPDATE_IR = 15,
 } tap_state_t;
 
+#define OPTIONS_NO_READ 0
+#define OPTIONS_MAX_BITS 128
 #define TMS_BUFFER_SZ 128
 
 static pio_jtag_inst_t* _jtag;
@@ -359,17 +361,12 @@ int jtag_shift_dr(const uint8_t *tdi, unsigned char *tdo, int drlen, tap_state_t
 
 void dirtyjtag_toggle_clk(uint8_t tms, uint8_t tdi, uint32_t clk_len)
 {
-	int actual_length;
 	uint8_t buf[] = {CMD_CLK,
 				(uint8_t)(((tms) ? SIG_TMS : 0) | ((tdi) ? SIG_TDI : 0)),
 				0,
 				CMD_STOP};
 	while (clk_len > 0) {
 		buf[2] = (clk_len > 64) ? 64 : (uint8_t)clk_len;
-        /*
-		int ret = libusb_bulk_transfer(dev_handle, DIRTYJTAG_WRITE_EP,
-				buf, 4, &actual_length, DIRTYJTAG_TIMEOUT);
-                */
         cmd_handle(_jtag, buf, 4, NULL, true);
 		clk_len -= buf[2];
 	}
@@ -382,8 +379,6 @@ void dirtyjtag_idle_clocks(int nb)
 	dirtyjtag_toggle_clk(c, 0, nb);
 }
 
-#define OPTIONS_NO_READ 0
-#define OPTIONS_MAX_BITS 128
 
 int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 {
@@ -427,30 +422,6 @@ int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 		actual_length = 0;
 
         cmd_handle(_jtag, tx_buf, (byte_to_send+header_offset), rx_buf, true);
-        /*
-		int ret = libusb_bulk_transfer(dev_handle, DIRTYJTAG_WRITE_EP,
-				(unsigned char *)tx_buf, (byte_to_send + header_offset),
-				&actual_length, DIRTYJTAG_TIMEOUT);
-		if ((ret < 0) || (actual_length != (int)(byte_to_send + header_offset))) {
-			cerr << "writeTDI: fill: usb bulk write failed " << ret <<
-				"actual length: " << actual_length << endl;
-			return EXIT_FAILURE;
-		}
-		// cerr << actual_length << ", " << bit_to_send << endl;
-
-		if (rx || (_version <= 1)) {
-			int transfer_length = (bit_to_send > 255) ? byte_to_send :32;
-			do {
-				ret = libusb_bulk_transfer(dev_handle, DIRTYJTAG_READ_EP,
-					rx_buf, transfer_length, &actual_length, DIRTYJTAG_TIMEOUT);
-				if (ret < 0) {
-					cerr << "writeTDI: read: usb bulk read failed " << ret << endl;
-					return EXIT_FAILURE;
-				}
-			} while (actual_length == 0);
-			assert((size_t)actual_length >= byte_to_send);
-		}
-        */
 
 		if (rx) {
 			for (int i = 0; i < bit_to_send; i++)
@@ -487,25 +458,6 @@ int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 				CMD_STOP,
 			};
             cmd_handle(_jtag, buf, sizeof(buf), &sig, true);
-            /*
-			if (libusb_bulk_transfer(dev_handle, DIRTYJTAG_WRITE_EP,
-									 buf, sizeof(buf), &actual_length,
-									 DIRTYJTAG_TIMEOUT) < 0)
-			{
-				cerr << "writeTDI: last bit error: usb bulk write failed 1" << endl;
-				return -EXIT_FAILURE;
-			}
-			do
-			{
-				if (libusb_bulk_transfer(dev_handle, DIRTYJTAG_READ_EP,
-											&sig, 1, &actual_length,
-											DIRTYJTAG_TIMEOUT) < 0)
-				{
-					cerr << "writeTDI: last bit error: usb bulk read failed" << endl;
-					return -EXIT_FAILURE;
-				}
-			} while (actual_length == 0);
-            */
 			rx[pos >> 3] >>= 1;
 			if (sig & SIG_TDO)
 			{
@@ -514,15 +466,6 @@ int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 			buf[2] &= ~SIG_TCK;
 			buf[3] = CMD_STOP;
             cmd_handle(_jtag, buf, 4, NULL, true);
-            /*
-			if (libusb_bulk_transfer(dev_handle, DIRTYJTAG_WRITE_EP,
-									 buf, 4, &actual_length,
-									 DIRTYJTAG_TIMEOUT) < 0)
-			{
-				cerr << "writeTDI: last bit error: usb bulk write failed 2" << endl;
-				return -EXIT_FAILURE;
-			}
-            */
 
 		} else {
             dirtyjtag_toggle_clk(SIG_TMS, last_bit, 1);
