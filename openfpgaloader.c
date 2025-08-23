@@ -479,17 +479,14 @@ int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 bool lattice_wr_rd(pio_jtag_inst_t* jtag, uint8_t cmd, 
                    const uint8_t* tx, int tx_len, 
                    uint8_t* rx, int rx_len) {
+
+
     int kXferLen = rx_len;
     if (tx_len > rx_len)
         kXferLen = tx_len;
 
     uint8_t* xfer_tx = malloc(kXferLen);
     uint8_t* xfer_rx = malloc(kXferLen);
-    if (!xfer_tx || !xfer_rx) {
-        free(xfer_tx);
-        free(xfer_rx);
-        return false;
-    }
 
     memset(xfer_tx, 0, kXferLen);
     if (tx != NULL && tx_len > 0) {
