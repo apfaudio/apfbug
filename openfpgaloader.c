@@ -1,4 +1,5 @@
 #include "openfpgaloader.h"
+#include "lattice_cmds.h"
 
 #ifdef UNIT_TEST
 // Stub definitions for unit testing
@@ -18,6 +19,19 @@ enum SignalIdentifier {
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+
+// Flash erase modes (for ISC_ERASE)
+#define FLASH_ERASE_SRAM        (1<<0)
+#define FLASH_ERASE_FEATURE     (1<<1)
+#define FLASH_ERASE_CFG         (1<<2)
+#define FLASH_ERASE_UFM         (1<<3)
+#define FLASH_ERASE_ALL         0x0F
+
+// Status register bits
+#define REG_STATUS_DONE         (1 << 8)   /* Flash or SRAM Done Flag */
+#define REG_STATUS_ISC_EN       (1 << 9)   /* Enable Configuration Interface */
+#define REG_STATUS_BUSY         (1 << 12)  /* Busy Flag */
+#define REG_STATUS_FAIL         (1 << 13)  /* Fail Flag */
 
 // DirtyJTAG command definitions (from dirtyJtag.cpp)
 enum dirtyJtagCmd {
@@ -484,7 +498,7 @@ int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 
 // Core Lattice function: write/read operation
 // Direct port of openFPGALoader's Lattice::wr_rd function
-bool lattice_wr_rd(pio_jtag_inst_t* jtag, uint8_t cmd, 
+static bool lattice_wr_rd(uint8_t cmd, 
                    const uint8_t* tx, int tx_len, 
                    uint8_t* rx, int rx_len) {
 
@@ -522,11 +536,11 @@ bool lattice_wr_rd(pio_jtag_inst_t* jtag, uint8_t cmd,
 }
 
 // Poll busy flag - direct port of openFPGALoader's pollBusyFlag
-bool lattice_poll_busy_flag(pio_jtag_inst_t* jtag) {
+static bool lattice_poll_busy_flag(void) {
     uint8_t rx;
     int timeout = 0;
     do {
-        if (!lattice_wr_rd(jtag, LSC_CHECK_BUSY, NULL, 0, &rx, 1))
+        if (!lattice_wr_rd(LSC_CHECK_BUSY, NULL, 0, &rx, 1))
             return false;
         dirtyjtag_idle_clocks(100);  // Some idle clocks
         if (timeout == 100000) {
@@ -541,10 +555,10 @@ bool lattice_poll_busy_flag(pio_jtag_inst_t* jtag) {
 
 // High-level ECP5 functions - direct ports from openFPGALoader
 
-uint32_t ecp5_jtag_read_id(pio_jtag_inst_t* jtag) {
+uint32_t ecp5_jtag_read_id(void) {
     // Direct port of Lattice::idCode()
     uint8_t device_id[4];
-    if (!lattice_wr_rd(jtag, READ_ID, NULL, 0, device_id, 4))
+    if (!lattice_wr_rd(READ_ID, NULL, 0, device_id, 4))
         return 0;
         
     return device_id[3] << 24 |
@@ -553,39 +567,39 @@ uint32_t ecp5_jtag_read_id(pio_jtag_inst_t* jtag) {
            device_id[0];
 }
 
-bool ecp5_jtag_check_busy(pio_jtag_inst_t* jtag) {
+bool ecp5_jtag_check_busy(void) {
     // Direct port of pollBusyFlag for single check
     uint8_t rx;
-    if (!lattice_wr_rd(jtag, LSC_CHECK_BUSY, NULL, 0, &rx, 1))
+    if (!lattice_wr_rd(LSC_CHECK_BUSY, NULL, 0, &rx, 1))
         return true;  // Assume busy on error
 	jtag_set_state(RUN_TEST_IDLE);
     return (rx & 1) != 0;
 }
 
-void ecp5_jtag_enable_config(pio_jtag_inst_t* jtag) {
+void ecp5_jtag_enable_config(void) {
     // Direct port of Lattice::EnableISC(0x00)
     uint8_t flash_mode = 0x00;
-    lattice_wr_rd(jtag, ISC_ENABLE, &flash_mode, 1, NULL, 0);
+    lattice_wr_rd(ISC_ENABLE, &flash_mode, 1, NULL, 0);
 	jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
-    lattice_poll_busy_flag(jtag);
+    lattice_poll_busy_flag();
 }
 
-void ecp5_jtag_disable_config(pio_jtag_inst_t* jtag) {
+void ecp5_jtag_disable_config(void) {
     // Direct port of Lattice::DisableISC()
-    lattice_wr_rd(jtag, ISC_DISABLE, NULL, 0, NULL, 0);
+    lattice_wr_rd(ISC_DISABLE, NULL, 0, NULL, 0);
 	jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
-    lattice_poll_busy_flag(jtag);
+    lattice_poll_busy_flag();
 }
 
-void ecp5_jtag_erase(pio_jtag_inst_t* jtag) {
+void ecp5_jtag_erase(void) {
     // Direct port of SRAM erase from openFPGALoader
     uint8_t erase_op = FLASH_ERASE_SRAM;  // Erase SRAM only
-    lattice_wr_rd(jtag, ISC_ERASE, &erase_op, 1, NULL, 0);
+    lattice_wr_rd(ISC_ERASE, &erase_op, 1, NULL, 0);
 	jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
-    lattice_poll_busy_flag(jtag);
+    lattice_poll_busy_flag();
 }
 
 // Helper function to reverse bits in a byte (port of ConfigBitstreamParser::reverseByte)
@@ -598,20 +612,20 @@ static uint8_t reverse_byte(uint8_t b) {
     return reversed;
 }
 
-void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_data, uint32_t size) {
+void ecp5_jtag_load_bitstream(const uint8_t* bitstream_data, uint32_t size) {
     // Direct port of openFPGALoader's corrected bitstream loading implementation
 
-    ecp5_jtag_enable_config(jtag);
-    ecp5_jtag_erase(jtag);
+    ecp5_jtag_enable_config();
+    ecp5_jtag_erase();
 
     // Step 1: LSC_INIT_ADDRESS (0x46) - Initialize address pointer
-    if (!lattice_wr_rd(jtag, 0x46, NULL, 0, NULL, 0))
+    if (!lattice_wr_rd(0x46, NULL, 0, NULL, 0))
         return;
     jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
     
     // Step 2: LSC_BITSTREAM_BURST (0x7A) - Enter bitstream mode
-    if (!lattice_wr_rd(jtag, LSC_BITSTREAM_BURST, NULL, 0, NULL, 0))
+    if (!lattice_wr_rd(LSC_BITSTREAM_BURST, NULL, 0, NULL, 0))
         return;
     jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(2);
@@ -643,18 +657,18 @@ void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_da
     dirtyjtag_idle_clocks(1000);
     
     // Step 5: Send final command (0xff) like reference  
-    lattice_wr_rd(jtag, 0xff, NULL, 0, NULL, 0);
-    lattice_wr_rd(jtag, 0xff, NULL, 0, NULL, 0);
-	lattice_wr_rd(jtag, 0xff, NULL, 0, NULL, 0);
+    lattice_wr_rd(0xff, NULL, 0, NULL, 0);
+    lattice_wr_rd(0xff, NULL, 0, NULL, 0);
+	lattice_wr_rd(0xff, NULL, 0, NULL, 0);
 
-    ecp5_jtag_disable_config(jtag);
+    ecp5_jtag_disable_config();
 	jtag_test_logic_reset();
 }
 
-uint64_t ecp5_jtag_read_status(pio_jtag_inst_t* jtag) {
+uint64_t ecp5_jtag_read_status(void) {
     uint8_t status_buf[8];
     memset(status_buf, 0, 8);
-    lattice_wr_rd(jtag, 0x3C, NULL, 0, status_buf, 8); // READ_STATUS_REGISTER - 64 bits
+    lattice_wr_rd(0x3C, NULL, 0, status_buf, 8); // READ_STATUS_REGISTER - 64 bits
     jtag_set_state(RUN_TEST_IDLE);
     
     // Parse 64-bit status register like reference
@@ -664,10 +678,10 @@ uint64_t ecp5_jtag_read_status(pio_jtag_inst_t* jtag) {
     return status_reg;
 }
 
-void ecp5_jtag_refresh(pio_jtag_inst_t* jtag) {
+void ecp5_jtag_refresh(void) {
     // Direct port of Lattice::loadConfiguration()
-    lattice_wr_rd(jtag, LSC_REFRESH, NULL, 0, NULL, 0);
+    lattice_wr_rd(LSC_REFRESH, NULL, 0, NULL, 0);
 	jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
-    lattice_poll_busy_flag(jtag);
+    lattice_poll_busy_flag();
 }

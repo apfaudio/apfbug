@@ -35,6 +35,7 @@
 
 #include "openfpgaloader.h"
 #include "lattice_cmds.h"
+#include "bitstream_rom.h"
 
 enum CommandIdentifier {
   CMD_STOP = 0x00,
@@ -223,7 +224,7 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, 
 
     jtag_set_clk_freq(jtag, 60000);
 
-    uint32_t device_id = ecp5_jtag_read_id(jtag);
+    uint32_t device_id = ecp5_jtag_read_id();
     if (device_id_out) {
         *device_id_out = device_id;
     }
@@ -237,10 +238,10 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, 
     if (!device_found) {
         return false;
     }
-    ecp5_jtag_load_bitstream(jtag, bitstream->data, bitstream->size);
+    ecp5_jtag_load_bitstream(bitstream->data, bitstream->size);
 
     // Read status register after bitstream loading
-    uint64_t status = ecp5_jtag_read_status(jtag);
+    uint64_t status = ecp5_jtag_read_status();
     if (status_out) {
         *status_out = status;
     }

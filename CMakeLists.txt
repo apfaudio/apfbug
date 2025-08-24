@@ -52,7 +52,7 @@ add_executable(dirtyJtag
 		cmd.c
         led.c
         openfpgaloader.c
-        raw_bitstreams.c
+        bitstream_rom.c
         lattice_cmds.c
 )
 

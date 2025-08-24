@@ -48,7 +48,7 @@ int main() {
     
     // Test 1: Read device ID
     printf("Test 1: Reading device ID\n");
-    uint32_t device_id = ecp5_jtag_read_id(&mock_jtag);
+    uint32_t device_id = ecp5_jtag_read_id();
     printf("Device ID: 0x%08X (expected: 0x41111043)\n", device_id);
     
     if (device_id == 0x41111043) {
@@ -59,25 +59,25 @@ int main() {
     
     // Test 2: Check busy flag
     printf("\nTest 2: Check busy flag\n");
-    bool is_busy = ecp5_jtag_check_busy(&mock_jtag);
+    bool is_busy = ecp5_jtag_check_busy();
     printf("Busy flag: %s\n", is_busy ? "BUSY" : "NOT BUSY");
     
     // Test 3: Config enable/disable
     printf("\nTest 3: Enable/Disable configuration\n");
-    ecp5_jtag_enable_config(&mock_jtag);
+    ecp5_jtag_enable_config();
     printf("Config enabled\n");
     
-    ecp5_jtag_disable_config(&mock_jtag);
+    ecp5_jtag_disable_config();
     printf("Config disabled\n");
     
     // Test 4: SRAM erase
     printf("\nTest 4: SRAM erase\n");
-    ecp5_jtag_erase(&mock_jtag);
+    ecp5_jtag_erase();
     printf("SRAM erased\n");
     
     // Test 5: Refresh
     printf("\nTest 5: Refresh\n");
-    ecp5_jtag_refresh(&mock_jtag);
+    ecp5_jtag_refresh();
     printf("Refreshed\n");
     
     printf("\nAll tests completed successfully!\n");

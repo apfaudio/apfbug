@@ -1,4 +1,4 @@
-#include "openfpgaloader.h"
+#include "bitstream_rom.h"
 
 // Auto-generated raw bitstream data
 // Generated with bitstream_to_c.py
