@@ -220,6 +220,9 @@ extern pio_jtag_inst_t jtag;
 
 bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out, uint64_t* status_out) {
     const struct bitstream_info* bitstream = &bitstreams[bitstream_number];
+
+    jtag_set_clk_freq(jtag, 60000);
+
     uint32_t device_id = ecp5_jtag_read_id(jtag);
     if (device_id_out) {
         *device_id_out = device_id;
