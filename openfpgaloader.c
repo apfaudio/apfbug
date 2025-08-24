@@ -96,6 +96,14 @@ void jtag_flush_tms(bool flush_buffer)
 	}
 }
 
+void jtag_test_logic_reset()
+{
+	for (int i = 0; i < 6; i++)
+		ojtag_set_tms(0x01);
+	jtag_flush_tms(false);
+	_state = TEST_LOGIC_RESET;
+}
+
 void jtag_set_state(tap_state_t newState)
 {
     _curr_tdi = 1;
@@ -592,7 +600,10 @@ static uint8_t reverse_byte(uint8_t b) {
 
 void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_data, uint32_t size) {
     // Direct port of openFPGALoader's corrected bitstream loading implementation
-    
+
+    ecp5_jtag_enable_config(jtag);
+    ecp5_jtag_erase(jtag);
+
     // Step 1: LSC_INIT_ADDRESS (0x46) - Initialize address pointer
     if (!lattice_wr_rd(jtag, 0x46, NULL, 0, NULL, 0))
         return;
@@ -633,6 +644,11 @@ void ecp5_jtag_load_bitstream(pio_jtag_inst_t* jtag, const uint8_t* bitstream_da
     
     // Step 5: Send final command (0xff) like reference  
     lattice_wr_rd(jtag, 0xff, NULL, 0, NULL, 0);
+    lattice_wr_rd(jtag, 0xff, NULL, 0, NULL, 0);
+	lattice_wr_rd(jtag, 0xff, NULL, 0, NULL, 0);
+
+    ecp5_jtag_disable_config(jtag);
+	jtag_test_logic_reset();
 }
 
 uint64_t ecp5_jtag_read_status(pio_jtag_inst_t* jtag) {
