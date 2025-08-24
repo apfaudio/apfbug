@@ -15,9 +15,6 @@
 
 #include "dirtyJtagConfig.h"
 
-#include <i2c_fifo.h>
-#include <i2c_slave.h>
-
 static const uint I2C_SLAVE_ADDRESS = 0x17;
 static const uint I2C_BAUDRATE = 100000; // 100 kHz
 
@@ -25,53 +22,6 @@ static const uint I2C_SLAVE_SDA_PIN = 28;
 static const uint I2C_SLAVE_SCL_PIN = 29;
 
 //#define MULTICORE
-
-static struct
-{
-    uint8_t mem[256];
-    uint8_t mem_address;
-    bool mem_address_written;
-} context;
-
-static void i2c_slave_handler(i2c_inst_t *i2c, i2c_slave_event_t event) {
-    switch (event) {
-        case I2C_SLAVE_RECEIVE: // master has written some data
-            if (!context.mem_address_written) {
-                // writes always start with the memory address
-                context.mem_address = i2c_read_byte(i2c);
-                context.mem_address_written = true;
-            } else {
-                // save into memory
-                context.mem[context.mem_address] = i2c_read_byte(i2c);
-                context.mem_address++;
-            }
-            break;
-        case I2C_SLAVE_REQUEST: // master is requesting data
-            // load from memory
-            i2c_write_byte(i2c, context.mem[context.mem_address]);
-            context.mem_address++;
-            break;
-        case I2C_SLAVE_FINISH: // master has signalled Stop / Restart
-            context.mem_address_written = false;
-            break;
-        default:
-            break;
-    }
-}
-
-static void setup_slave() {
-    gpio_init(I2C_SLAVE_SDA_PIN);
-    gpio_set_function(I2C_SLAVE_SDA_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SLAVE_SDA_PIN);
-
-    gpio_init(I2C_SLAVE_SCL_PIN);
-    gpio_set_function(I2C_SLAVE_SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SLAVE_SCL_PIN);
-
-    i2c_init(i2c0, I2C_BAUDRATE);
-    // configure I2C0 for slave mode
-    i2c_slave_init(i2c0, I2C_SLAVE_ADDRESS, &i2c_slave_handler);
-}
 
 void init_pins()
 {
@@ -241,35 +191,11 @@ int main()
     gpio_init(4);
     gpio_set_dir(4, GPIO_IN);
 
-    setup_slave();
-
     jtag_init(&jtag);
 
-    int mod = 0;
     while (1) {
         jtag_main_task();
         fetch_command();//for unicore implementation
-        ++mod;
-        if (mod > 100000) {
-            uint16_t raw = adc_read();
-            const float conversion_factor = 3.3f / (1<<12);
-            float result = raw * conversion_factor;
-            float temp = 27 - (result - 0.706)/0.001721;
-            char buf[128];
-            sprintf(buf, "%fdegC, gpio: %d%d%d%d mem: %x:%x:%x:%x\r\n", temp,
-                    gpio_get(1),
-                    gpio_get(2),
-                    gpio_get(3),
-                    gpio_get(4),
-                    context.mem[0],
-                    context.mem[1],
-                    context.mem[2],
-                    context.mem[3]
-                    );
-            tud_cdc_n_write(0, buf, strlen(buf));
-            tud_cdc_n_write_flush(0);
-            mod = 0;
-        }
         if (reconfigure != 0) {
             uint32_t device_id;
             uint64_t status;

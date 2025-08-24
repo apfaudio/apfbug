@@ -1,6 +1,0 @@
-[submodule "pico_i2c_slave"]
-	path = pico_i2c_slave
-	url = https://github.com/vmilea/pico_i2c_slave
-[submodule "ecpprog"]
-	path = ecpprog
-	url = https://github.com/gregdavill/ecpprog
