@@ -37,28 +37,6 @@
 #include "lattice_cmds.h"
 #include "bitstream_rom.h"
 
-enum CommandIdentifier {
-  CMD_STOP = 0x00,
-  CMD_INFO = 0x01,
-  CMD_FREQ = 0x02,
-  CMD_XFER = 0x03,
-  CMD_SETSIG = 0x04,
-  CMD_GETSIG = 0x05,
-  CMD_CLK = 0x06,
-  CMD_SETVOLTAGE = 0x07,
-  CMD_GOTOBOOTLOADER = 0x08
-};
-
-enum CommandModifier
-{
-  // CMD_XFER
-  NO_READ = 0x80,
-  EXTEND_LENGTH = 0x40,
-  // CMD_CLK
-  READOUT = 0x80,
-};
-
-
 /**
  * @brief Handle CMD_INFO command
  *

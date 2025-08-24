@@ -1,17 +1,10 @@
 #include "openfpgaloader.h"
 #include "lattice_cmds.h"
+#include "dirtyjtag_protocol.h"
 
 #ifdef UNIT_TEST
 // Stub definitions for unit testing
 uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host);
-enum SignalIdentifier {
-  SIG_TCK = 1 << 1,
-  SIG_TDI = 1 << 2,
-  SIG_TDO = 1 << 3,
-  SIG_TMS = 1 << 4,
-  SIG_TRST = 1 << 5,
-  SIG_SRST = 1 << 6
-};
 #else
 #include "cmd.h"
 #endif
@@ -33,22 +26,6 @@ enum SignalIdentifier {
 #define REG_STATUS_BUSY         (1 << 12)  /* Busy Flag */
 #define REG_STATUS_FAIL         (1 << 13)  /* Fail Flag */
 
-// DirtyJTAG command definitions (from dirtyJtag.cpp)
-enum dirtyJtagCmd {
-    CMD_STOP = 0x00,
-    CMD_INFO = 0x01,
-    CMD_FREQ = 0x02,
-    CMD_XFER = 0x03,
-    CMD_SETSIG = 0x04,
-    CMD_GETSIG = 0x05,
-    CMD_CLK = 0x06
-};
-
-enum CommandModifier {
-    EXTEND_LENGTH = 0x40,
-    NO_READ = 0x80
-};
-
 // JTAG TAP States
 typedef enum {
     TEST_LOGIC_RESET = 0,
@@ -69,7 +46,6 @@ typedef enum {
     UPDATE_IR = 15,
 } tap_state_t;
 
-#define OPTIONS_NO_READ 0x80
 #define OPTIONS_MAX_BITS 240
 #define TMS_BUFFER_SZ 128
 
@@ -418,7 +394,7 @@ int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 		memset(tx_cpy, 0, kRealByteLen);
 	tx_ptr = tx_cpy;
 
-	tx_buf[0] = CMD_XFER | (rx ? 0 : OPTIONS_NO_READ);
+	tx_buf[0] = CMD_XFER | (rx ? 0 : NO_READ);
 	uint16_t max_bit_transfer_length = OPTIONS_MAX_BITS;
 	// need to cut the bits on byte size.
 	assert(max_bit_transfer_length % 8 == 0);
