@@ -33,7 +33,7 @@ uint32_t ecp5_jtag_read_id(void);
 void ecp5_jtag_load_bitstream(const uint8_t* bitstream_data, uint32_t size);
 
 // Read the ECP5's status register
-uint64_t ecp5_jtag_read_status(void);
+uint32_t ecp5_jtag_read_status(void);
 
 #ifdef UNIT_TEST
 // Used for more granular unit testing

@@ -641,16 +641,14 @@ void ecp5_jtag_load_bitstream(const uint8_t* bitstream_data, uint32_t size) {
 	jtag_test_logic_reset();
 }
 
-uint64_t ecp5_jtag_read_status(void) {
-    uint8_t status_buf[8];
-    memset(status_buf, 0, 8);
-    lattice_wr_rd(0x3C, NULL, 0, status_buf, 8); // READ_STATUS_REGISTER - 64 bits
+uint32_t ecp5_jtag_read_status(void) {
+    uint8_t status_buf[4];
+    memset(status_buf, 0, 4);
+    lattice_wr_rd(0x3C, NULL, 0, status_buf, 4);
     jtag_set_state(RUN_TEST_IDLE);
-    
-    // Parse 64-bit status register like reference
-    uint64_t status_reg = (uint64_t)status_buf[7] << 56 | (uint64_t)status_buf[6] << 48 | 
-                         (uint64_t)status_buf[5] << 40 | (uint64_t)status_buf[4] << 32 | 
-                         status_buf[3] << 24 | status_buf[2] << 16 | status_buf[1] << 8 | status_buf[0];
+
+    uint32_t status_reg = status_buf[3] << 24 | status_buf[2] << 16 |
+                          status_buf[1] << 8 | status_buf[0];
     return status_reg;
 }
 

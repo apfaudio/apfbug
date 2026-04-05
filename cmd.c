@@ -235,7 +235,7 @@ static bool heatshrink_decompress(const uint8_t *compressed, uint32_t compressed
     return out_offset == original_size;
 }
 
-bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out, uint64_t* status_out) {
+bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out, uint32_t* status_out) {
     const struct bitstream_info* bitstream = &bitstreams[bitstream_number];
 
     jtag_set_clk_freq(jtag, 60000);
@@ -267,7 +267,7 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, 
     ecp5_jtag_load_bitstream(decompressed_buf, bitstream->original_size);
 
     // Read status register after bitstream loading
-    uint64_t status = ecp5_jtag_read_status();
+    uint32_t status = ecp5_jtag_read_status();
     if (status_out) {
         *status_out = status;
     }

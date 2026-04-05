@@ -198,11 +198,11 @@ int main()
         fetch_command();//for unicore implementation
         if (reconfigure != 0) {
             uint32_t device_id;
-            uint64_t status;
+            uint32_t status;
             bool success = load_bitstream_by_number(&jtag, reconfigure-1, &device_id, &status);
             char device_id_msg[120];
             if (success) {
-                sprintf(device_id_msg, "Device ID: 0x%08X loaded bitstream %u, Status: 0x%016llx\r\n", device_id, reconfigure, status);
+                sprintf(device_id_msg, "Device ID: 0x%08X loaded bitstream %u, Status: 0x%08X\r\n", device_id, reconfigure, status);
             } else {
                 sprintf(device_id_msg, "Failed to load bitstream %u (Device ID: 0x%08X)\r\n", reconfigure, device_id);
             }
