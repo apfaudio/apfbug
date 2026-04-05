@@ -208,12 +208,14 @@ static bool heatshrink_decompress(const uint8_t *compressed, uint32_t compressed
     size_t sink_offset = 0;
     size_t out_offset = 0;
 
-    while (sink_offset < compressed_size) {
-        size_t sunk = 0;
-        HSD_sink_res sres = heatshrink_decoder_sink(&hsd,
-            (uint8_t *)&compressed[sink_offset], compressed_size - sink_offset, &sunk);
-        if (sres < 0) return false;
-        sink_offset += sunk;
+    while (out_offset < original_size) {
+        if (sink_offset < compressed_size) {
+            size_t sunk = 0;
+            HSD_sink_res sres = heatshrink_decoder_sink(&hsd,
+                (uint8_t *)&compressed[sink_offset], compressed_size - sink_offset, &sunk);
+            if (sres < 0) return false;
+            sink_offset += sunk;
+        }
 
         HSD_poll_res pres;
         do {
@@ -222,22 +224,13 @@ static bool heatshrink_decompress(const uint8_t *compressed, uint32_t compressed
                 &output[out_offset], original_size - out_offset, &polled);
             if (pres < 0) return false;
             out_offset += polled;
+            if (out_offset >= original_size) break;
         } while (pres == HSDR_POLL_MORE);
-    }
 
-    HSD_finish_res fres;
-    do {
-        fres = heatshrink_decoder_finish(&hsd);
-        if (fres < 0) return false;
-        size_t polled = 0;
-        HSD_poll_res pres;
-        do {
-            pres = heatshrink_decoder_poll(&hsd,
-                &output[out_offset], original_size - out_offset, &polled);
-            if (pres < 0) return false;
-            out_offset += polled;
-        } while (pres == HSDR_POLL_MORE);
-    } while (fres == HSDR_FINISH_MORE);
+        if (sink_offset >= compressed_size && pres == HSDR_POLL_EMPTY) {
+            heatshrink_decoder_finish(&hsd);
+        }
+    }
 
     return out_offset == original_size;
 }
