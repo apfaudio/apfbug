@@ -52,6 +52,7 @@ add_executable(dirtyJtag
         openfpgaloader.c
         bitstream_rom.c
         lattice_cmds.c
+        heatshrink_decoder.c
 )
 
 target_include_directories(dirtyJtag PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

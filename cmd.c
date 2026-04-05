@@ -36,6 +36,7 @@
 #include "openfpgaloader.h"
 #include "lattice_cmds.h"
 #include "bitstream_rom.h"
+#include "heatshrink_decoder.h"
 
 /**
  * @brief Handle CMD_INFO command
@@ -197,6 +198,50 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
 
 extern pio_jtag_inst_t jtag;
 
+static uint8_t decompressed_buf[128 * 1024];
+
+static bool heatshrink_decompress(const uint8_t *compressed, uint32_t compressed_size,
+                                   uint8_t *output, uint32_t original_size) {
+    heatshrink_decoder hsd;
+    heatshrink_decoder_reset(&hsd);
+
+    size_t sink_offset = 0;
+    size_t out_offset = 0;
+
+    while (sink_offset < compressed_size) {
+        size_t sunk = 0;
+        HSD_sink_res sres = heatshrink_decoder_sink(&hsd,
+            (uint8_t *)&compressed[sink_offset], compressed_size - sink_offset, &sunk);
+        if (sres < 0) return false;
+        sink_offset += sunk;
+
+        HSD_poll_res pres;
+        do {
+            size_t polled = 0;
+            pres = heatshrink_decoder_poll(&hsd,
+                &output[out_offset], original_size - out_offset, &polled);
+            if (pres < 0) return false;
+            out_offset += polled;
+        } while (pres == HSDR_POLL_MORE);
+    }
+
+    HSD_finish_res fres;
+    do {
+        fres = heatshrink_decoder_finish(&hsd);
+        if (fres < 0) return false;
+        size_t polled = 0;
+        HSD_poll_res pres;
+        do {
+            pres = heatshrink_decoder_poll(&hsd,
+                &output[out_offset], original_size - out_offset, &polled);
+            if (pres < 0) return false;
+            out_offset += polled;
+        } while (pres == HSDR_POLL_MORE);
+    } while (fres == HSDR_FINISH_MORE);
+
+    return out_offset == original_size;
+}
+
 bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out, uint64_t* status_out) {
     const struct bitstream_info* bitstream = &bitstreams[bitstream_number];
 
@@ -216,7 +261,17 @@ bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, 
     if (!device_found) {
         return false;
     }
-    ecp5_jtag_load_bitstream(bitstream->data, bitstream->size);
+
+    if (bitstream->original_size > sizeof(decompressed_buf)) {
+        return false;
+    }
+
+    if (!heatshrink_decompress(bitstream->data, bitstream->compressed_size,
+                                decompressed_buf, bitstream->original_size)) {
+        return false;
+    }
+
+    ecp5_jtag_load_bitstream(decompressed_buf, bitstream->original_size);
 
     // Read status register after bitstream loading
     uint64_t status = ecp5_jtag_read_status();

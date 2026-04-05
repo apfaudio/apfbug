@@ -3,14 +3,13 @@
 
 #include <stdint.h>
 
-// Bitstream info structure
 struct bitstream_info {
     const char* name;
     const uint8_t* data;
-    uint32_t size;
+    uint32_t compressed_size;
+    uint32_t original_size;
 };
 
-// Bitstream data (defined in raw_bitstreams.c)
 extern const struct bitstream_info bitstreams[];
 extern const int bitstream_count;
 
