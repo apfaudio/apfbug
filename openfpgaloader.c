@@ -274,32 +274,10 @@ void jtag_set_state(tap_state_t newState)
 
 void dirtyjtag_write_tms(const uint8_t *tms, uint32_t len)
 {
-	if (len == 0)
-		return;
-	uint8_t mask = SIG_TCK | SIG_TMS;
-	uint8_t buf[64];
-	uint32_t buffer_idx = 0;
-	for (uint32_t i = 0; i < len; i++)
-	{
-		uint8_t val = (tms[i >> 3] & (1 << (i & 0x07))) ? SIG_TMS : 0;
-		buf[buffer_idx++] = CMD_SETSIG;
-		buf[buffer_idx++] = mask;
-		buf[buffer_idx++] = val;
-		buf[buffer_idx++] = CMD_SETSIG;
-		buf[buffer_idx++] = mask;
-		buf[buffer_idx++] = val | SIG_TCK;
-		if ((buffer_idx + 9) >= sizeof(buf) || (i == len - 1)) {
-			// flush the buffer
-			if (i == len - 1) {
-				// insert tck falling edge
-				buf[buffer_idx++] = CMD_SETSIG;
-				buf[buffer_idx++] = mask;
-				buf[buffer_idx++] = val;
-			}
-			buf[buffer_idx++] = CMD_STOP;
-            cmd_handle(_jtag, buf, buffer_idx, NULL, true);
-			buffer_idx = 0;
-		}
+	// Drive TMS transitions directly through PIO, bypassing cmd_handle dispatch.
+	for (uint32_t i = 0; i < len; i++) {
+		bool tms_val = (tms[i >> 3] >> (i & 0x07)) & 1;
+		pio_jtag_write_tms_blocking(_jtag, _curr_tdi, tms_val, 1);
 	}
 }
 
@@ -358,15 +336,10 @@ int jtag_shift_dr(const uint8_t *tdi, unsigned char *tdo, int drlen, tap_state_t
 
 void dirtyjtag_toggle_clk(uint8_t tms, uint8_t tdi, uint32_t clk_len)
 {
-	uint8_t buf[] = {CMD_CLK,
-				(uint8_t)(((tms) ? SIG_TMS : 0) | ((tdi) ? SIG_TDI : 0)),
-				0,
-				CMD_STOP};
-	while (clk_len > 0) {
-		buf[2] = (clk_len > 64) ? 64 : (uint8_t)clk_len;
-        cmd_handle(_jtag, buf, 4, NULL, true);
-		clk_len -= buf[2];
-	}
+	if (clk_len == 0)
+		return;
+	// Single PIO/DMA transfer for the entire run, bypassing cmd_handle dispatch.
+	pio_jtag_write_tms_blocking(_jtag, !!tdi, !!tms, clk_len);
 }
 
 void dirtyjtag_idle_clocks(int nb)
@@ -575,14 +548,13 @@ void ecp5_jtag_erase(void) {
     lattice_poll_busy_flag();
 }
 
-// Helper function to reverse bits in a byte (port of ConfigBitstreamParser::reverseByte)
-static uint8_t reverse_byte(uint8_t b) {
-    uint8_t reversed = 0;
-    for (int i = 0; i < 8; i++) {
-        reversed = (reversed << 1) | (b & 1);
-        b >>= 1;
-    }
-    return reversed;
+// Parallel bit reversal — 6 shifts + 6 masks, no branches or lookup table.
+// Much faster than a loop on Cortex-M0+ which lacks RBIT.
+static inline uint8_t reverse_byte(uint8_t b) {
+    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+    b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+    return b;
 }
 
 void ecp5_jtag_load_bitstream(const uint8_t* bitstream_data, uint32_t size) {

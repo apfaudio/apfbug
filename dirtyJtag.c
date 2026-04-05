@@ -244,12 +244,17 @@ int main()
             uint32_t status;
             bool success = load_bitstream_by_number(&jtag, reconfigure-1, &device_id, &status);
             char device_id_msg[120];
+            int msg_len;
             if (success) {
-                sprintf(device_id_msg, "Device ID: 0x%08X loaded bitstream %u, Status: 0x%08X\r\n", device_id, reconfigure, status);
+                msg_len = snprintf(device_id_msg, sizeof(device_id_msg),
+                    "Device ID: 0x%08X loaded bitstream %lu, Status: 0x%08X\r\n",
+                    (unsigned)device_id, (unsigned long)reconfigure, (unsigned)status);
             } else {
-                sprintf(device_id_msg, "Failed to load bitstream %u (Device ID: 0x%08X)\r\n", reconfigure, device_id);
+                msg_len = snprintf(device_id_msg, sizeof(device_id_msg),
+                    "Failed to load bitstream %lu (Device ID: 0x%08X)\r\n",
+                    (unsigned long)reconfigure, (unsigned)device_id);
             }
-            tud_cdc_n_write(0, device_id_msg, strlen(device_id_msg));
+            tud_cdc_n_write(0, device_id_msg, msg_len);
             tud_cdc_n_write_flush(0);
             reconfigure = 0;
         }

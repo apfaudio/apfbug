@@ -285,8 +285,6 @@ static void cmd_freq(pio_jtag_inst_t* jtag, const uint8_t *commands) {
   jtag_set_clk_freq(jtag, (commands[1] << 8) | commands[2]);
 }
 
-//static uint8_t output_buffer[64];
-
 uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf) {
   uint16_t transferred_bits;
   uint8_t* output_buffer = 0;
