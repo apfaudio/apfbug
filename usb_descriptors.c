@@ -28,11 +28,8 @@
 #include "version.h"
 #include "get_serial.h"
 
-#if ( USB_CDC_UART_BRIDGE )
-#define USB_BCD   0x0200
-#else
-#define USB_BCD   0x0110
-#endif
+// USB 2.1 to signal BOS descriptor support (needed for WebUSB)
+#define USB_BCD   0x0210
 
 //--------------------------------------------------------------------+
 // Device Descriptors
@@ -116,6 +113,48 @@ uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 }
 
 //--------------------------------------------------------------------+
+// BOS Descriptor (WebUSB)
+//--------------------------------------------------------------------+
+
+#define WEBUSB_VENDOR_CODE 0xD0
+
+// WebUSB Platform Capability UUID: 3408b638-09a9-47a0-8bfd-a0768815b665
+#define TUD_BOS_WEBUSB_DESC_LEN 24
+#define BOS_TOTAL_LEN (TUD_BOS_DESC_LEN + TUD_BOS_WEBUSB_DESC_LEN)
+
+uint8_t const desc_bos[] = {
+  // BOS header
+  TUD_BOS_DESCRIPTOR(BOS_TOTAL_LEN, 1),
+
+  // WebUSB Platform Capability
+  TUD_BOS_WEBUSB_DESC_LEN,           // bLength
+  TUSB_DESC_DEVICE_CAPABILITY,        // bDescriptorType
+  0x05, // bDevCapabilityType (Platform)
+  0x00,                               // bReserved
+  // PlatformCapabilityUUID: WebUSB
+  0x38, 0xB6, 0x08, 0x34, 0xA9, 0x09, 0xA0, 0x47,
+  0x8B, 0xFD, 0xA0, 0x76, 0x88, 0x15, 0xB6, 0x65,
+  0x00, 0x01,                         // bcdVersion 1.0
+  WEBUSB_VENDOR_CODE,                 // bVendorCode
+  0x01,                               // iLandingPage
+};
+
+uint8_t const * tud_descriptor_bos_cb(void)
+{
+  return desc_bos;
+}
+
+// WebUSB URL descriptor for "https://tiliqua.io"
+#define WEBUSB_URL_STR "tiliqua.io"
+
+const uint8_t webusb_url_descriptor[] = {
+  3 + sizeof(WEBUSB_URL_STR) - 1,    // bLength
+  0x03,                               // bDescriptorType (URL)
+  0x01,                               // bScheme (https://)
+  't', 'i', 'l', 'i', 'q', 'u', 'a', '.', 'i', 'o',
+};
+
+//--------------------------------------------------------------------+
 // String Descriptors
 //--------------------------------------------------------------------+
 
@@ -143,6 +182,16 @@ char const *string_desc_arr[] =
 
 static uint16_t _desc_str[32];
 
+// Microsoft OS 1.0 String Descriptor (raw 18-byte format per spec)
+static const uint8_t ms_os_10_string_descriptor[18] = {
+  0x12,                                     // bLength = 18
+  0x03,                                     // bDescriptorType = string
+  'M', 0, 'S', 0, 'F', 0, 'T', 0,         // qwSignature = "MSFT100" UTF-16LE
+  '1', 0, '0', 0, '0', 0,
+  0xEE,                                     // bMS_VendorCode
+  0x00,                                     // bPad
+};
+
 // Invoked when received GET STRING DESCRIPTOR request
 // Application return pointer to descriptor, whose contents must exist long enough for transfer to complete
 uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
@@ -154,20 +203,18 @@ uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
   if ( index == 0) {
       memcpy(&_desc_str[1], string_desc_arr[0], 2);
       chr_count = 1;
+  } else if (index == 0xee) {
+      // Microsoft OS 1.0 String Descriptor — return raw descriptor directly
+      return (uint16_t const*)ms_os_10_string_descriptor;
   } else {
       // Convert ASCII string into UTF-16
       const char* str;
-      if (index == 0xee) {
-          // Microsoft OS 1.0 String Descriptor
-          str = "MSFT100\xee\x01";
-      } else {
-          if ( !(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0])) ) {
-              return NULL;
-          }
 
-          str = string_desc_arr[index];
-
+      if ( !(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0])) ) {
+          return NULL;
       }
+
+      str = string_desc_arr[index];
 
       // Cap at max char
       chr_count = strlen(str);
@@ -177,7 +224,6 @@ uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
       {
           _desc_str[1+i] = str[i];
       }
-
   }
 
   // first byte is length (including header), second byte is string type

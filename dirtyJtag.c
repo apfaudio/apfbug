@@ -145,11 +145,60 @@ void fetch_command()
 #endif
 }
 
-//this is to work around the fact that tinyUSB does not handle setup request automatically
-//Hence this boiler plate code
+// MS OS 1.0 Extended Compat ID descriptor — associates WINUSB with interface 0
+static const uint8_t ms_os_10_compat_id[] = {
+    // Header (16 bytes)
+    0x28, 0x00, 0x00, 0x00,  // dwLength = 40
+    0x00, 0x01,              // bcdVersion = 1.00
+    0x04, 0x00,              // wIndex = extended compat ID
+    0x01,                    // bCount = 1 function
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // reserved
+    // Function 0 (24 bytes)
+    0x00,                    // bFirstInterfaceNumber = 0
+    0x01,                    // bReserved (must be 1)
+    'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00,  // compatibleID
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // subCompatibleID
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // reserved
+};
+
+// MS OS 1.0 Extended Properties descriptor (empty, like Glasgow)
+static const uint8_t ms_os_10_properties[] = {
+    0x0A, 0x00, 0x00, 0x00,  // dwLength = 10
+    0x00, 0x01,              // bcdVersion = 1.00
+    0x05, 0x00,              // wIndex = extended properties
+    0x00, 0x00,              // wCount = 0
+};
+
+// Vendor code 0xEE, matching the bMS_VendorCode in the MS OS 1.0 string descriptor (index 0xEE)
+#define MS_OS_10_VENDOR_CODE 0xEE
+#define WEBUSB_VENDOR_CODE   0xD0
+
+extern const uint8_t webusb_url_descriptor[];
+
 bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const * request)
 {
     if (stage != CONTROL_STAGE_SETUP) return true;
+
+    // MS OS 1.0 descriptor requests
+    if (request->bRequest == MS_OS_10_VENDOR_CODE) {
+        if (request->wIndex == 0x0004) {
+            tud_control_xfer(rhport, request, (void *)ms_os_10_compat_id, sizeof(ms_os_10_compat_id));
+            return true;
+        }
+        if (request->wIndex == 0x0005) {
+            tud_control_xfer(rhport, request, (void *)ms_os_10_properties, sizeof(ms_os_10_properties));
+            return true;
+        }
+    }
+
+    // WebUSB URL request
+    if (request->bRequest == WEBUSB_VENDOR_CODE &&
+        request->wIndex == 0x0002 &&  // GET_URL
+        request->wValue == 0x0001) {  // iLandingPage
+        tud_control_xfer(rhport, request, (void *)webusb_url_descriptor, webusb_url_descriptor[0]);
+        return true;
+    }
+
     return false;
 }
 
