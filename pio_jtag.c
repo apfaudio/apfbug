@@ -9,33 +9,6 @@ void jtag_task();//to process USB OUT packets while waiting for DMA to finish
 
 static bool last_tdo = false;
 
-#if 0
-static bool pins_source = false; //false: PIO, true: GPIO
-
-static void switch_pins_source(const pio_jtag_inst_t *jtag, bool gpio)
-{
-    if (pins_source != gpio)
-    {
-        if (gpio)
-        {
-            gpio_put(jtag->pin_tdi, gpio_get(jtag->pin_tdi));
-            gpio_set_function(jtag->pin_tdi, GPIO_FUNC_SIO);
-            gpio_put(jtag->pin_tck, gpio_get(jtag->pin_tck));
-            gpio_set_function(jtag->pin_tck, GPIO_FUNC_SIO);
-            gpio_set_dir_out_masked((1 << jtag->pin_tdi) | (1 << jtag->pin_tck));
-        }
-        else
-        {
-            gpio_set_function(jtag->pin_tdi, GPIO_FUNC_PIO0);
-            gpio_set_function(jtag->pin_tck, GPIO_FUNC_PIO0);
-        }
-        pins_source = gpio;
-    }
-}
-#endif
-
-
-
 #ifdef DMA
 
 static int tx_dma_chan = -1;
@@ -88,7 +61,7 @@ void dma_init()
 
 void __time_critical_func(pio_jtag_write_blocking)(const pio_jtag_inst_t *jtag, const uint8_t *bsrc, size_t len) 
 {
-    size_t byte_length = (len+7 >> 3);
+    size_t byte_length = ((len + 7) >> 3);
     size_t last_shift = ((byte_length << 3) - len);
     size_t tx_remain = byte_length, rx_remain = last_shift ? byte_length : byte_length+1;
     io_rw_8 *txfifo = (io_rw_8 *) &jtag->pio->txf[jtag->sm];
@@ -137,7 +110,7 @@ void __time_critical_func(pio_jtag_write_blocking)(const pio_jtag_inst_t *jtag, 
 void __time_critical_func(pio_jtag_write_read_blocking)(const pio_jtag_inst_t *jtag, const uint8_t *bsrc, uint8_t *bdst,
                                                          size_t len) 
 {
-    size_t byte_length = (len+7 >> 3);
+    size_t byte_length = ((len + 7) >> 3);
     size_t last_shift = ((byte_length << 3) - len);
     size_t tx_remain = byte_length, rx_remain = last_shift ? byte_length : byte_length+1;
     uint8_t* rx_last_byte_p = &bdst[byte_length-1];
@@ -190,7 +163,7 @@ void __time_critical_func(pio_jtag_write_read_blocking)(const pio_jtag_inst_t *j
 
 uint8_t __time_critical_func(pio_jtag_write_tms_blocking)(const pio_jtag_inst_t *jtag, bool tdi, bool tms, size_t len)
 {
-    size_t byte_length = (len+7 >> 3);
+    size_t byte_length = ((len + 7) >> 3);
     size_t last_shift = ((byte_length << 3) - len);
     size_t tx_remain = byte_length, rx_remain = last_shift ? byte_length : byte_length+1;
     io_rw_8 *txfifo = (io_rw_8 *) &jtag->pio->txf[jtag->sm];

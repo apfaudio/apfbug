@@ -78,7 +78,6 @@ void ojtag_set_tms(unsigned char tms)
 
 void jtag_flush_tms(bool flush_buffer)
 {
-	int ret = 0;
 	if (_num_tms != 0) {
 		dirtyjtag_write_tms(_tms_buffer, _num_tms);
 		memset(_tms_buffer, 0, TMS_BUFFER_SZ);
@@ -474,22 +473,23 @@ int dirtyjtag_write_tdi(const uint8_t *tx, uint8_t *rx, uint32_t len, bool end)
 
 // Core Lattice function: write/read operation
 // Direct port of openFPGALoader's Lattice::wr_rd function
-static bool lattice_wr_rd(uint8_t cmd, 
-                   const uint8_t* tx, int tx_len, 
+// Max transfer length is bounded by control register sizes (4 bytes)
+#define LATTICE_WR_RD_MAX_LEN 8
+static bool lattice_wr_rd(uint8_t cmd,
+                   const uint8_t* tx, int tx_len,
                    uint8_t* rx, int rx_len) {
-
 
     int kXferLen = rx_len;
     if (tx_len > rx_len)
         kXferLen = tx_len;
 
-    uint8_t* xfer_tx = malloc(kXferLen);
-    uint8_t* xfer_rx = malloc(kXferLen);
+    assert(kXferLen <= LATTICE_WR_RD_MAX_LEN);
 
-    memset(xfer_tx, 0, kXferLen);
+    uint8_t xfer_tx[LATTICE_WR_RD_MAX_LEN] = {0};
+    uint8_t xfer_rx[LATTICE_WR_RD_MAX_LEN] = {0};
+
     if (tx != NULL && tx_len > 0) {
-        for (int i = 0; i < tx_len; i++)
-            xfer_tx[i] = tx[i];
+        memcpy(xfer_tx, tx, tx_len);
     }
 
     // Step 1: shiftIR(&cmd, NULL, 8, Jtag::PAUSE_IR)
@@ -502,12 +502,9 @@ static bool lattice_wr_rd(uint8_t cmd,
 
     // Copy response data
     if (rx) {
-        for (int i = 0; i < rx_len; i++)
-            rx[i] = xfer_rx[i];
+        memcpy(rx, xfer_rx, rx_len);
     }
 
-    free(xfer_tx);
-    free(xfer_rx);
     return true;
 }
 
@@ -594,57 +591,54 @@ void ecp5_jtag_load_bitstream(const uint8_t* bitstream_data, uint32_t size) {
     ecp5_jtag_enable_config();
     ecp5_jtag_erase();
 
-    // Step 1: LSC_INIT_ADDRESS (0x46) - Initialize address pointer
-    if (!lattice_wr_rd(0x46, NULL, 0, NULL, 0))
+    // Step 1: Initialize address pointer
+    if (!lattice_wr_rd(LSC_INIT_ADDRESS, NULL, 0, NULL, 0))
         return;
     jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
-    
-    // Step 2: LSC_BITSTREAM_BURST (0x7A) - Enter bitstream mode
+
+    // Step 2: Enter bitstream burst mode
     if (!lattice_wr_rd(LSC_BITSTREAM_BURST, NULL, 0, NULL, 0))
         return;
     jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(2);
-    
+
     // Step 3: Send bitstream data in chunks with byte reversal
-    const uint32_t chunk_size = 1024;  // Use 1024 bytes like openFPGALoader
+    #define BITSTREAM_CHUNK_SIZE 1024
+    static uint8_t tmp_buffer[BITSTREAM_CHUNK_SIZE];
     uint32_t bytes_sent = 0;
-    uint8_t* tmp_buffer = malloc(chunk_size);
-    if (!tmp_buffer) return;
-    
+
     while (bytes_sent < size) {
-        uint32_t bytes_to_send = (size - bytes_sent > chunk_size) ? chunk_size : (size - bytes_sent);
+        uint32_t bytes_to_send = (size - bytes_sent > BITSTREAM_CHUNK_SIZE) ? BITSTREAM_CHUNK_SIZE : (size - bytes_sent);
         tap_state_t next_state = (bytes_sent + bytes_to_send >= size) ? RUN_TEST_IDLE : SHIFT_DR;
-        
+
         // Apply byte reversal like openFPGALoader: reverseByte(data[i+ii])
         for (uint32_t ii = 0; ii < bytes_to_send; ii++) {
             tmp_buffer[ii] = reverse_byte(bitstream_data[bytes_sent + ii]);
         }
-        
+
         // Send chunk to DR with appropriate end state
         jtag_shift_dr(tmp_buffer, NULL, bytes_to_send * 8, next_state);
         bytes_sent += bytes_to_send;
     }
-    
-    free(tmp_buffer);
-    
+
     // Step 4: Final idle clocks and status check like reference
     jtag_set_state(RUN_TEST_IDLE);
     dirtyjtag_idle_clocks(1000);
-    
-    // Step 5: Send final command (0xff) like reference  
-    lattice_wr_rd(0xff, NULL, 0, NULL, 0);
-    lattice_wr_rd(0xff, NULL, 0, NULL, 0);
-	lattice_wr_rd(0xff, NULL, 0, NULL, 0);
+
+    // Step 5: ISC_NOOP to flush pipeline
+    lattice_wr_rd(ISC_NOOP, NULL, 0, NULL, 0);
+    lattice_wr_rd(ISC_NOOP, NULL, 0, NULL, 0);
+    lattice_wr_rd(ISC_NOOP, NULL, 0, NULL, 0);
 
     ecp5_jtag_disable_config();
-	jtag_test_logic_reset();
+    jtag_test_logic_reset();
 }
 
 uint32_t ecp5_jtag_read_status(void) {
     uint8_t status_buf[4];
     memset(status_buf, 0, 4);
-    lattice_wr_rd(0x3C, NULL, 0, status_buf, 4);
+    lattice_wr_rd(LSC_READ_STATUS, NULL, 0, status_buf, 4);
     jtag_set_state(RUN_TEST_IDLE);
 
     uint32_t status_reg = status_buf[3] << 24 | status_buf[2] << 16 |

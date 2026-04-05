@@ -15,12 +15,6 @@
 
 #include "dirtyJtagConfig.h"
 
-static const uint I2C_SLAVE_ADDRESS = 0x17;
-static const uint I2C_BAUDRATE = 100000; // 100 kHz
-
-static const uint I2C_SLAVE_SDA_PIN = 28;
-static const uint I2C_SLAVE_SCL_PIN = 29;
-
 //#define MULTICORE
 
 void init_pins()
@@ -202,7 +196,7 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
     return false;
 }
 
-extern uint32_t reconfigure;
+extern volatile uint32_t reconfigure;
 
 int main()
 {

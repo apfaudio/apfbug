@@ -139,9 +139,6 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
     {
       bool no_read = *commands & NO_READ;
       bool extend_length = *commands & EXTEND_LENGTH;
-      uint16_t bits = commands[1];
-      if (extend_length) bits += 256;
-      uint32_t data_bytes = (bits + 7) / 8;
       uint32_t trbytes = cmd_xfer(jtag, commands, extend_length, no_read, output_buffer);
       commands += 1 + trbytes;
       output_buffer += (no_read ? 0 : trbytes);
@@ -236,6 +233,9 @@ static bool heatshrink_decompress(const uint8_t *compressed, uint32_t compressed
 }
 
 bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out, uint32_t* status_out) {
+    if (bitstream_number >= bitstream_count) {
+        return false;
+    }
     const struct bitstream_info* bitstream = &bitstreams[bitstream_number];
 
     jtag_set_clk_freq(jtag, 60000);
