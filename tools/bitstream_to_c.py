@@ -1,26 +1,55 @@
 #!/usr/bin/env python3
 """
-Tool to convert heatshrink-compressed ECP5 bitstream files to C arrays for
-inclusion in the firmware.
+Tool to convert ECP5 bitstream files to C arrays for inclusion in the firmware.
 
 Usage:
-    python3 bitstream_to_c.py input1.bit.hs input2.bit.hs ... > bitstream_rom.c
+    python3 bitstream_to_c.py input1.bit input2.bit ... > bitstream_rom.c
 
-Each .hs file is expected to have a 4-byte little-endian original size header
-followed by the compressed data (as produced by compress_bitstream).
+Each input is compressed with the upstream heatshrink CLI (using the same
+window/lookahead parameters as the firmware's static decoder config) and
+emitted as a C array. The original (uncompressed) size is taken from the
+input file itself, so no intermediate .hs files or size header are needed.
+
+The heatshrink CLI is expected at ../heatshrink/heatshrink (build it with
+`make -C heatshrink heatshrink`), or pointed to via the HEATSHRINK env var.
 """
 
 import sys
 import os
-import struct
+import subprocess
+
+# Must match the firmware's static decoder config (heatshrink_config.h /
+# HEATSHRINK_STATIC_WINDOW_BITS, HEATSHRINK_STATIC_LOOKAHEAD_BITS).
+WINDOW_BITS = 8
+LOOKAHEAD_BITS = 4
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+HEATSHRINK = os.environ.get(
+    "HEATSHRINK", os.path.join(REPO_ROOT, "heatshrink", "heatshrink"))
+
+
+def heatshrink_compress(raw):
+    """Compress bytes with the heatshrink CLI via stdin/stdout."""
+    if not (os.path.isfile(HEATSHRINK) and os.access(HEATSHRINK, os.X_OK)):
+        sys.exit("Error: heatshrink CLI not found at %s\n"
+                 "Build it with: make -C heatshrink heatshrink\n"
+                 "(or set the HEATSHRINK env var to its path)" % HEATSHRINK)
+    proc = subprocess.run(
+        [HEATSHRINK, "-e", "-w", str(WINDOW_BITS), "-l", str(LOOKAHEAD_BITS)],
+        input=raw, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        sys.exit("Error: heatshrink failed: %s" % proc.stderr.decode(errors="replace"))
+    return proc.stdout
+
 
 def bitstream_to_c_array(filename, var_name):
-    """Convert a compressed bitstream file to a C array declaration."""
+    """Compress a bitstream file and convert it to a C array declaration."""
     with open(filename, 'rb') as f:
         raw = f.read()
 
-    original_size = struct.unpack('<I', raw[:4])[0]
-    compressed_data = raw[4:]
+    original_size = len(raw)
+    compressed_data = heatshrink_compress(raw)
 
     lines = ['static const uint8_t %s_data[] = {' % var_name]
 
@@ -66,8 +95,8 @@ def generate_footer(bitstreams):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: %s <bitstream1.bit.hs> [bitstream2.bit.hs] [...]" % sys.argv[0], file=sys.stderr)
-        print("\nConverts heatshrink-compressed ECP5 bitstream files to C arrays.", file=sys.stderr)
+        print("Usage: %s <bitstream1.bit> [bitstream2.bit] [...]" % sys.argv[0], file=sys.stderr)
+        print("\nCompresses ECP5 bitstream files (via the heatshrink CLI) into C arrays.", file=sys.stderr)
         sys.exit(1)
 
     print(generate_header())
