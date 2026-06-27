@@ -27,7 +27,6 @@
 #include <hardware/watchdog.h>
 #include <hardware/dma.h>
 #include <hardware/irq.h>
-#include "led.h"
 #include "tusb.h"
 #include "cdc_uart.h"
 #include "cmd.h"
@@ -235,7 +234,6 @@ void handle_rx_buffer(struct uart_device *uart) {
 }
 
 void process_connected_rx(struct uart_device *uart, uint32_t available_space) {
-    led_tx(1);
     uint32_t cdc_capacity = tud_cdc_n_write_available(uart->index);
     uint32_t transfer_size = MIN(available_space, cdc_capacity);
 
@@ -248,7 +246,6 @@ void process_connected_rx(struct uart_device *uart, uint32_t available_space) {
         intercept_uart(uart, uart->rx_read_address, written);
         update_read_pointer(uart, written);
     }
-    led_tx(0);
 }
 
 void process_disconnected_rx(struct uart_device *uart, uint32_t available_space) {
@@ -263,7 +260,6 @@ void handle_tx_buffer(struct uart_device *uart) {
 
     if (watermark == 0) return;
 
-    led_rx(1);
     size_t tx_len = tud_cdc_n_read(uart->index, (void*)uart->tx_write_address, watermark);
 
     // Update write pointer
@@ -282,7 +278,6 @@ void handle_tx_buffer(struct uart_device *uart) {
             dma_channel_set_trans_count(uart->tx_dma_channel, space, true);
         }
     }
-    led_rx(0);
 }
 
 void update_read_pointer(struct uart_device *uart, uint32_t increment) {

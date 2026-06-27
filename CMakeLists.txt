@@ -48,7 +48,6 @@ add_executable(dirtyJtag
         cdc_uart.c
 		get_serial.c
 		cmd.c
-        led.c
         openfpgaloader.c
         bitstream/rom.c
         lattice_cmds.c

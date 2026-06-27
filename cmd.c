@@ -328,14 +328,6 @@ void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands) {
   if (signal_mask & SIG_TMS) {
     jtag_set_tms(jtag, signal_status & SIG_TMS);
   }
-  
-  if (signal_mask & SIG_TRST) {
-    jtag_set_trst(jtag, signal_status & SIG_TRST);
-  }
-
-  if (signal_mask & SIG_SRST) {
-    jtag_set_rst(jtag, signal_status & SIG_SRST);
-  }
 }
 
 uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer)

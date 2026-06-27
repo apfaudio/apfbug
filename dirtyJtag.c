@@ -6,7 +6,6 @@
 #include "pico/multicore.h"
 #include "pio_jtag.h"
 #include "cdc_uart.h"
-#include "led.h"
 #include "bsp/board.h"
 #include "tusb.h"
 #include "cmd.h"
@@ -20,9 +19,6 @@
 void init_pins()
 {
     bi_decl(bi_4pins_with_names(PIN_TCK, "TCK", PIN_TDI, "TDI", PIN_TDO, "TDO", PIN_TMS, "TMS"));
-    #if !( BOARD_TYPE == BOARD_QMTECH_RP2040_DAUGHTERBOARD )
-    bi_decl(bi_2pins_with_names(PIN_RST, "RST", PIN_TRST, "TRST"));
-    #endif
 }
 
 pio_jtag_inst_t jtag = {
@@ -33,11 +29,7 @@ pio_jtag_inst_t jtag = {
 void djtag_init()
 {
     init_pins();
-    #if !( BOARD_TYPE == BOARD_QMTECH_RP2040_DAUGHTERBOARD )
-    init_jtag(&jtag, 1000, PIN_TCK, PIN_TDI, PIN_TDO, PIN_TMS, PIN_RST, PIN_TRST);
-    #else
-    init_jtag(&jtag, 1000, PIN_TCK, PIN_TDI, PIN_TDO, PIN_TMS, 255, 255);
-    #endif
+    init_jtag(&jtag, 1000, PIN_TCK, PIN_TDI, PIN_TDO, PIN_TMS);
 }
 typedef uint8_t cmd_buffer[64];
 static uint wr_buffer_number = 0;
@@ -75,7 +67,6 @@ void jtag_main_task()
         tud_task();// tinyusb device task
         if (tud_vendor_available())
         {
-            led_rx( 1 );
             uint bnum = wr_buffer_number;
             uint count = tud_vendor_read(buffer_infos[wr_buffer_number].buffer, 64);
             if (count != 0)
@@ -91,7 +82,6 @@ void jtag_main_task()
                 multicore_fifo_push_blocking(bnum);
 #endif
             }
-            led_rx( 0 );
         } else {
 #if ( USB_CDC_UART_BRIDGE )           
             cdc_uart_task();
@@ -207,7 +197,6 @@ int main()
     gpio_init(PIN_VBUS);
     gpio_set_dir(PIN_VBUS, GPIO_IN);
 
-    led_init( LED_INVERTED, PIN_LED_TX, PIN_LED_RX, PIN_LED_ERROR );
 #if ( USB_CDC_UART_BRIDGE )
     cdc_uart_init( PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );
     #if (PIN_UART_INTF_COUNT == 2)
