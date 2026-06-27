@@ -52,10 +52,12 @@ add_executable(dirtyJtag
         openfpgaloader.c
         bitstream_rom.c
         lattice_cmds.c
-        heatshrink_decoder.c
+        heatshrink/heatshrink_decoder.c
 )
 
-target_include_directories(dirtyJtag PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(dirtyJtag PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/heatshrink)
+
+target_compile_definitions(dirtyJtag PRIVATE HEATSHRINK_DYNAMIC_ALLOC=0)
 
 pico_generate_pio_header(dirtyJtag ${CMAKE_CURRENT_LIST_DIR}/jtag.pio)
 

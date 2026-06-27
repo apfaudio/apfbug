@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../heatshrink_encoder.h"
+#include "../heatshrink/heatshrink_encoder.h"
 
 static int compress_file(const char *inpath, const char *outpath) {
     FILE *fin = fopen(inpath, "rb");
