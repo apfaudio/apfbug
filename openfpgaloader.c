@@ -2,12 +2,7 @@
 #include "lattice_cmds.h"
 #include "dirtyjtag_protocol.h"
 
-#ifdef UNIT_TEST
-// Stub definitions for unit testing
-uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host);
-#else
 #include "cmd.h"
-#endif
 
 #include <string.h>
 #include <stdlib.h>

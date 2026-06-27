@@ -11,14 +11,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef UNIT_TEST
-// Stub definitions for unit testing
-typedef struct {
-    void* dummy;
-} pio_jtag_inst_t;
-#else
 #include "pio_jtag.h"
-#endif
 
 // Initialize static local to this module that stores the jtag handle, so
 // we don't have to snake it through every single function in the module.
@@ -34,14 +27,5 @@ void ecp5_jtag_load_bitstream(const uint8_t* bitstream_data, uint32_t size);
 
 // Read the ECP5's status register
 uint32_t ecp5_jtag_read_status(void);
-
-#ifdef UNIT_TEST
-// Used for more granular unit testing
-bool ecp5_jtag_check_busy(void);
-void ecp5_jtag_enable_config(void);
-void ecp5_jtag_disable_config(void);
-void ecp5_jtag_erase(void);
-void ecp5_jtag_refresh(void);
-#endif
 
 #endif // OPENFPGALOADER_H
