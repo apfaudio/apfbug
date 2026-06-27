@@ -35,7 +35,7 @@
 
 #include "openfpgaloader.h"
 #include "lattice_cmds.h"
-#include "bitstream_rom.h"
+#include "bitstream/rom.h"
 #include "heatshrink_decoder.h"
 
 /**

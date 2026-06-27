@@ -3,7 +3,7 @@
 Tool to convert ECP5 bitstream files to C arrays for inclusion in the firmware.
 
 Usage:
-    python3 bitstream_to_c.py input1.bit input2.bit ... > bitstream_rom.c
+    python3 genrom.py input1.bit input2.bit ... > rom.c
 
 Each input is compressed with the upstream heatshrink CLI (using the same
 window/lookahead parameters as the firmware's static decoder config) and
@@ -67,10 +67,10 @@ def bitstream_to_c_array(filename, var_name):
     return '\n'.join(lines), len(compressed_data), original_size
 
 def generate_header():
-    return '''#include "bitstream_rom.h"
+    return '''#include "rom.h"
 
 // Auto-generated compressed bitstream data
-// Generated with bitstream_to_c.py from heatshrink-compressed inputs
+// Generated with genrom.py from heatshrink-compressed inputs
 
 '''
 

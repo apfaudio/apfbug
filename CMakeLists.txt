@@ -50,7 +50,7 @@ add_executable(dirtyJtag
 		cmd.c
         led.c
         openfpgaloader.c
-        bitstream_rom.c
+        bitstream/rom.c
         lattice_cmds.c
         heatshrink/heatshrink_decoder.c
 )
