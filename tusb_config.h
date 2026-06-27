@@ -66,9 +66,9 @@
 //------------- CLASS -------------//
 #define CFG_TUD_HID             0
 #if ( USB_CDC_UART_BRIDGE )
- 	#if (PIN_UART_INTF_COUNT == 2)
+ 	#if (CDC_UART_INTF_COUNT == 2)
 		#define CFG_TUD_CDC         2
- 	#elif (PIN_UART_INTF_COUNT == 1)
+ 	#elif (CDC_UART_INTF_COUNT == 1)
  		#define CFG_TUD_CDC 		1
  	#endif
 #else

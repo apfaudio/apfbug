@@ -23,6 +23,9 @@ if(NOT DEFINED TILIQUA_HW_MAJOR)
     message(FATAL_ERROR "TILIQUA_HW_MAJOR must be defined. Please pass -DTILIQUA_HW_MAJOR=<value> to cmake")
 endif()
 
+# i2c slave library (https://github.com/vmilea/pico_i2c_slave)
+add_subdirectory(pico_i2c_slave/i2c_slave)
+
 # Add the compile definition
 add_compile_definitions(TILIQUA_HW_MAJOR=${TILIQUA_HW_MAJOR})
 
@@ -52,6 +55,7 @@ add_executable(dirtyJtag
         bitstream/rom.c
         lattice_cmds.c
         heatshrink/heatshrink_decoder.c
+        i2c_iface.c
 )
 
 target_include_directories(dirtyJtag PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/heatshrink)
@@ -78,6 +82,7 @@ target_link_libraries(dirtyJtag PRIVATE
 	tinyusb_device
 	tinyusb_board
 	pico_multicore
+    i2c_slave
 )
 
 pico_add_extra_outputs(dirtyJtag)

@@ -11,6 +11,7 @@
 #include "cmd.h"
 #include "get_serial.h"
 #include "openfpgaloader.h"
+#include "i2c_iface.h"
 
 #include "dirtyJtagConfig.h"
 
@@ -186,8 +187,6 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
     return false;
 }
 
-extern volatile uint32_t reconfigure;
-
 int main()
 {
     board_init();
@@ -198,9 +197,9 @@ int main()
     gpio_set_dir(PIN_VBUS, GPIO_IN);
 
 #if ( USB_CDC_UART_BRIDGE )
-    cdc_uart_init( PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );
-    #if (PIN_UART_INTF_COUNT == 2)
-        cdc_uart_init( PIN_UART1, PIN_UART1_RX, PIN_UART1_TX );
+    cdc_uart_init( 0, PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );
+    #if (CDC_UART_INTF_COUNT == 2)
+        cdc_uart_init( 1, PIN_UART1, PIN_UART1_RX, PIN_UART1_TX );
     #endif
 #endif
 
@@ -222,6 +221,8 @@ int main()
     gpio_set_dir(3, GPIO_IN);
     gpio_init(4);
     gpio_set_dir(4, GPIO_IN);
+
+    i2c_iface_init();
 
     jtag_init(&jtag);
 
