@@ -259,6 +259,10 @@ void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* line_coding)
 		reset_usb_boot(0, 0);
 	}
 
+	if (line_coding->bit_rate < USBUSART_BAUDRATE) {
+		return;
+	}
+
 	for (size_t i = 0; i < CDC_UART_INTF_COUNT; i++)
 	{
 		uart = &uart_devices[i];
