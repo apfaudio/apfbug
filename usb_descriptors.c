@@ -144,14 +144,14 @@ uint8_t const * tud_descriptor_bos_cb(void)
   return desc_bos;
 }
 
-// WebUSB URL descriptor for "https://tiliqua.io"
-#define WEBUSB_URL_STR "tiliqua.io"
+// WebUSB URL descriptor for "https://flash.tiliqua.io"
+#define WEBUSB_URL_STR "flash.tiliqua.io"
 
 const uint8_t webusb_url_descriptor[] = {
   3 + sizeof(WEBUSB_URL_STR) - 1,    // bLength
   0x03,                               // bDescriptorType (URL)
   0x01,                               // bScheme (https://)
-  't', 'i', 'l', 'i', 'q', 'u', 'a', '.', 'i', 'o',
+  'f', 'l', 'a', 's', 'h', '.', 't', 'i', 'l', 'i', 'q', 'u', 'a', '.', 'i', 'o',
 };
 
 //--------------------------------------------------------------------+
