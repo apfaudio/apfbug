@@ -5,11 +5,12 @@
 #include "pico/multicore.h"
 #include "pio_jtag.h"
 #include "cdc_uart.h"
-#include "led.h"
 #include "bsp/board.h"
 #include "tusb.h"
 #include "cmd.h"
 #include "get_serial.h"
+#include "openfpgaloader.h"
+#include "i2c_iface.h"
 
 #include "dirtyJtagConfig.h"
 
@@ -18,9 +19,6 @@
 void init_pins()
 {
     bi_decl(bi_4pins_with_names(PIN_TCK, "TCK", PIN_TDI, "TDI", PIN_TDO, "TDO", PIN_TMS, "TMS"));
-    #if !( BOARD_TYPE == BOARD_QMTECH_RP2040_DAUGHTERBOARD )
-    bi_decl(bi_2pins_with_names(PIN_RST, "RST", PIN_TRST, "TRST"));
-    #endif
 }
 
 pio_jtag_inst_t jtag = {
@@ -31,11 +29,7 @@ pio_jtag_inst_t jtag = {
 void djtag_init()
 {
     init_pins();
-    #if !( BOARD_TYPE == BOARD_QMTECH_RP2040_DAUGHTERBOARD )
-    init_jtag(&jtag, 1000, PIN_TCK, PIN_TDI, PIN_TDO, PIN_TMS, PIN_RST, PIN_TRST);
-    #else
-    init_jtag(&jtag, 1000, PIN_TCK, PIN_TDI, PIN_TDO, PIN_TMS, 255, 255);
-    #endif
+    init_jtag(&jtag, 1000, PIN_TCK, PIN_TDI, PIN_TDO, PIN_TMS);
 }
 typedef uint8_t cmd_buffer[64];
 static uint wr_buffer_number = 0;
@@ -73,7 +67,6 @@ void jtag_main_task()
         tud_task();// tinyusb device task
         if (tud_vendor_available())
         {
-            led_rx( 1 );
             uint bnum = wr_buffer_number;
             uint count = tud_vendor_read(buffer_infos[wr_buffer_number].buffer, 64);
             if (count != 0)
@@ -89,7 +82,6 @@ void jtag_main_task()
                 multicore_fifo_push_blocking(bnum);
 #endif
             }
-            led_rx( 0 );
         } else {
 #if ( USB_CDC_UART_BRIDGE )           
             cdc_uart_task();
@@ -137,15 +129,57 @@ void fetch_command()
 #endif
 }
 
-//this is to work around the fact that tinyUSB does not handle setup request automatically
-//Hence this boiler plate code
+// MS OS 1.0 extended compat ID: WINUSB on interface 0
+static const uint8_t ms_os_10_compat_id[] = {
+    0x28, 0x00, 0x00, 0x00,  // dwLength = 40
+    0x00, 0x01,              // bcdVersion = 1.00
+    0x04, 0x00,              // wIndex = extended compat ID
+    0x01,                    // bCount = 1 function
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // reserved
+    0x00,                    // bFirstInterfaceNumber = 0
+    0x01,                    // bReserved (must be 1)
+    'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00,  // compatibleID
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // subCompatibleID
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // reserved
+};
+
+// MS OS 1.0 extended properties (empty)
+static const uint8_t ms_os_10_properties[] = {
+    0x0A, 0x00, 0x00, 0x00,  // dwLength = 10
+    0x00, 0x01,              // bcdVersion = 1.00
+    0x05, 0x00,              // wIndex = extended properties
+    0x00, 0x00,              // wCount = 0
+};
+
+#define MS_OS_10_VENDOR_CODE 0xEE
+#define WEBUSB_VENDOR_CODE   0xD0
+
+extern const uint8_t webusb_url_descriptor[];
+
 bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const * request)
 {
     if (stage != CONTROL_STAGE_SETUP) return true;
+
+    if (request->bRequest == MS_OS_10_VENDOR_CODE) {
+        if (request->wIndex == 0x0004) {
+            tud_control_xfer(rhport, request, (void *)ms_os_10_compat_id, sizeof(ms_os_10_compat_id));
+            return true;
+        }
+        if (request->wIndex == 0x0005) {
+            tud_control_xfer(rhport, request, (void *)ms_os_10_properties, sizeof(ms_os_10_properties));
+            return true;
+        }
+    }
+
+    if (request->bRequest == WEBUSB_VENDOR_CODE &&
+        request->wIndex == 0x0002 &&  // GET_URL
+        request->wValue == 0x0001) {  // iLandingPage
+        tud_control_xfer(rhport, request, (void *)webusb_url_descriptor, webusb_url_descriptor[0]);
+        return true;
+    }
+
     return false;
 }
-
-extern uint32_t reconfigure;
 
 int main()
 {
@@ -156,11 +190,10 @@ int main()
     gpio_init(PIN_VBUS);
     gpio_set_dir(PIN_VBUS, GPIO_IN);
 
-    led_init( LED_INVERTED, PIN_LED_TX, PIN_LED_RX, PIN_LED_ERROR );
 #if ( USB_CDC_UART_BRIDGE )
-    cdc_uart_init( PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );
-    #if (PIN_UART_INTF_COUNT == 2)
-        cdc_uart_init( PIN_UART1, PIN_UART1_RX, PIN_UART1_TX );
+    cdc_uart_init( 0, PIN_UART0, PIN_UART0_RX, PIN_UART0_TX );
+    #if (CDC_UART_INTF_COUNT == 2)
+        cdc_uart_init( 1, PIN_UART1, PIN_UART1_RX, PIN_UART1_TX );
     #endif
 #endif
 
@@ -169,16 +202,35 @@ int main()
 #else 
     djtag_init();
 #endif
+
+    i2c_iface_init();
+
+    jtag_init(&jtag);
+
     while (1) {
         jtag_main_task();
         fetch_command();//for unicore implementation
-        if (reconfigure != 0) {
-            uint32_t size_out = 0;
-            uint8_t* buffer_out = NULL;
-            if (cmd_data_for_index((reconfigure-1), &size_out, &buffer_out)) {
-                replay_compressed_jtag_sequence(size_out, buffer_out);
+        uint32_t request = reconfigure;
+        if (request != 0) {
+            uint32_t device_id;
+            uint32_t status;
+            bool success = load_bitstream_by_number(&jtag, request-1, &device_id, &status);
+            char device_id_msg[120];
+            int msg_len;
+            if (success) {
+                msg_len = snprintf(device_id_msg, sizeof(device_id_msg),
+                    "Device ID: 0x%08X loaded bitstream %lu, Status: 0x%08X\r\n",
+                    (unsigned)device_id, (unsigned long)request, (unsigned)status);
+            } else {
+                msg_len = snprintf(device_id_msg, sizeof(device_id_msg),
+                    "Failed to load bitstream %lu (Device ID: 0x%08X)\r\n",
+                    (unsigned long)request, (unsigned)device_id);
             }
-            reconfigure = 0;
+            tud_cdc_n_write(0, device_id_msg, msg_len);
+            tud_cdc_n_write_flush(0);
+            if (reconfigure == request) {
+                reconfigure = 0;
+            }
         }
     }
 }

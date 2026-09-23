@@ -9,33 +9,6 @@ void jtag_task();//to process USB OUT packets while waiting for DMA to finish
 
 static bool last_tdo = false;
 
-#if 0
-static bool pins_source = false; //false: PIO, true: GPIO
-
-static void switch_pins_source(const pio_jtag_inst_t *jtag, bool gpio)
-{
-    if (pins_source != gpio)
-    {
-        if (gpio)
-        {
-            gpio_put(jtag->pin_tdi, gpio_get(jtag->pin_tdi));
-            gpio_set_function(jtag->pin_tdi, GPIO_FUNC_SIO);
-            gpio_put(jtag->pin_tck, gpio_get(jtag->pin_tck));
-            gpio_set_function(jtag->pin_tck, GPIO_FUNC_SIO);
-            gpio_set_dir_out_masked((1 << jtag->pin_tdi) | (1 << jtag->pin_tck));
-        }
-        else
-        {
-            gpio_set_function(jtag->pin_tdi, GPIO_FUNC_PIO0);
-            gpio_set_function(jtag->pin_tck, GPIO_FUNC_PIO0);
-        }
-        pins_source = gpio;
-    }
-}
-#endif
-
-
-
 #ifdef DMA
 
 static int tx_dma_chan = -1;
@@ -88,7 +61,7 @@ void dma_init()
 
 void __time_critical_func(pio_jtag_write_blocking)(const pio_jtag_inst_t *jtag, const uint8_t *bsrc, size_t len) 
 {
-    size_t byte_length = (len+7 >> 3);
+    size_t byte_length = ((len + 7) >> 3);
     size_t last_shift = ((byte_length << 3) - len);
     size_t tx_remain = byte_length, rx_remain = last_shift ? byte_length : byte_length+1;
     io_rw_8 *txfifo = (io_rw_8 *) &jtag->pio->txf[jtag->sm];
@@ -137,7 +110,7 @@ void __time_critical_func(pio_jtag_write_blocking)(const pio_jtag_inst_t *jtag, 
 void __time_critical_func(pio_jtag_write_read_blocking)(const pio_jtag_inst_t *jtag, const uint8_t *bsrc, uint8_t *bdst,
                                                          size_t len) 
 {
-    size_t byte_length = (len+7 >> 3);
+    size_t byte_length = ((len + 7) >> 3);
     size_t last_shift = ((byte_length << 3) - len);
     size_t tx_remain = byte_length, rx_remain = last_shift ? byte_length : byte_length+1;
     uint8_t* rx_last_byte_p = &bdst[byte_length-1];
@@ -190,7 +163,7 @@ void __time_critical_func(pio_jtag_write_read_blocking)(const pio_jtag_inst_t *j
 
 uint8_t __time_critical_func(pio_jtag_write_tms_blocking)(const pio_jtag_inst_t *jtag, bool tdi, bool tms, size_t len)
 {
-    size_t byte_length = (len+7 >> 3);
+    size_t byte_length = ((len + 7) >> 3);
     size_t last_shift = ((byte_length << 3) - len);
     size_t tx_remain = byte_length, rx_remain = last_shift ? byte_length : byte_length+1;
     io_rw_8 *txfifo = (io_rw_8 *) &jtag->pio->txf[jtag->sm];
@@ -239,33 +212,20 @@ uint8_t __time_critical_func(pio_jtag_write_tms_blocking)(const pio_jtag_inst_t 
     return last_tdo ? 0xFF : 0x00;
 }
 
-static void init_pins(uint pin_tck, uint pin_tdi, uint pin_tdo, uint pin_tms, uint pin_rst, uint pin_trst)
+static void init_pins(uint pin_tms)
 {
-    #if !( BOARD_TYPE == BOARD_QMTECH_RP2040_DAUGHTERBOARD )
-    // emulate open drain with pull up and direction
-    gpio_pull_up(pin_rst);
-    gpio_clr_mask((1u << pin_tms) | (1u << pin_rst) | (1u << pin_trst));
-    gpio_init_mask((1u << pin_tms) | (1u << pin_rst) | (1u << pin_trst));
-    gpio_set_dir_masked( (1u << pin_tms) | (1u << pin_trst), 0xffffffffu);
-    gpio_set_dir(pin_rst, false);
-    #else
     gpio_clr_mask((1u << pin_tms));
     gpio_init_mask((1u << pin_tms));
     gpio_set_dir_masked( (1u << pin_tms), 0xffffffffu);
-    #endif
 }
 
-void init_jtag(pio_jtag_inst_t* jtag, uint freq, uint pin_tck, uint pin_tdi, uint pin_tdo, uint pin_tms, uint pin_rst, uint pin_trst)
+void init_jtag(pio_jtag_inst_t* jtag, uint freq, uint pin_tck, uint pin_tdi, uint pin_tdo, uint pin_tms)
 {
-    init_pins(pin_tck, pin_tdi, pin_tdo, pin_tms, pin_rst, pin_trst);
+    init_pins(pin_tms);
     jtag->pin_tdi = pin_tdi;
     jtag->pin_tdo = pin_tdo;
     jtag->pin_tck = pin_tck;
     jtag->pin_tms = pin_tms;
-    #if !( BOARD_TYPE == BOARD_QMTECH_RP2040_DAUGHTERBOARD )
-    jtag->pin_rst = pin_rst;
-    jtag->pin_trst = pin_trst;
-    #endif
     uint16_t clkdiv = 31;  // around 1 MHz @ 125MHz clk_sys
     pio_jtag_init(jtag->pio, jtag->sm,
                     clkdiv,

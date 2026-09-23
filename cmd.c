@@ -33,46 +33,10 @@
 #include "pio_jtag.h"
 #include "cmd.h"
 
+#include "openfpgaloader.h"
+#include "lattice_cmds.h"
+#include "bitstream/rom.h"
 #include "heatshrink_decoder.h"
-
-// These files contain compressed ROM arrays of JTAG
-// commands required to flash bootloader stubs.
-// TODO: document how to record these!
-#if (TILIQUA_HW_MAJOR == 2)
-#include "bitstreams/bitstreams_sc2.c"
-#else
-#include "bitstreams/bitstreams_sc3.c"
-#endif
-
-enum CommandIdentifier {
-  CMD_STOP = 0x00,
-  CMD_INFO = 0x01,
-  CMD_FREQ = 0x02,
-  CMD_XFER = 0x03,
-  CMD_SETSIG = 0x04,
-  CMD_GETSIG = 0x05,
-  CMD_CLK = 0x06,
-  CMD_SETVOLTAGE = 0x07,
-  CMD_GOTOBOOTLOADER = 0x08
-};
-
-enum CommandModifier
-{
-  // CMD_XFER
-  NO_READ = 0x80,
-  EXTEND_LENGTH = 0x40,
-  // CMD_CLK
-  READOUT = 0x80,
-};
-
-enum SignalIdentifier {
-  SIG_TCK = 1 << 1,
-  SIG_TDI = 1 << 2,
-  SIG_TDO = 1 << 3,
-  SIG_TMS = 1 << 4,
-  SIG_TRST = 1 << 5,
-  SIG_SRST = 1 << 6
-};
 
 /**
  * @brief Handle CMD_INFO command
@@ -103,7 +67,6 @@ static void cmd_freq(pio_jtag_inst_t* jtag, const uint8_t *commands);
  * @param usbd_dev USB device
  * @param commands Command data
  */
-static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf);
 
 /**
  * @brief Handle CMD_SETSIG command
@@ -112,7 +75,6 @@ static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool ex
  *
  * @param commands Command data
  */
-static void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands);
 
 /**
  * @brief Handle CMD_GETSIG command
@@ -121,7 +83,7 @@ static void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands);
  * 
  * @param usbd_dev USB device
  */
-static uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer);
+uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer);
 
 /**
  * @brief Handle CMD_CLK command
@@ -132,7 +94,7 @@ static uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer);
  * @param commands Command data
  * @param readout Enable TDO readout
  */
-static uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer);
+uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer);
 /**
  * @brief Handle CMD_SETVOLTAGE command
  *
@@ -149,14 +111,17 @@ static void cmd_setvoltage(const uint8_t *commands);
  */
 static void cmd_gotobootloader(void);
 
-static heatshrink_decoder hsd;
-
 uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8_t* tx_buf, bool local_host) {
   uint8_t *commands= (uint8_t*)rxbuf;
   uint8_t *output_buffer = tx_buf;
+  
   while ((commands < (rxbuf + count)) && (*commands != CMD_STOP))
   {
-    switch ((*commands)&0x0F) {
+    uint8_t cmd_byte = *commands;
+    uint8_t cmd_type = cmd_byte & 0x0F;
+    
+    
+    switch (cmd_type) {
     case CMD_INFO:
     {
         if (!local_host) {
@@ -173,7 +138,8 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
     case CMD_XFER:
     {
       bool no_read = *commands & NO_READ;
-      uint32_t trbytes = cmd_xfer(jtag, commands, *commands & EXTEND_LENGTH, no_read, output_buffer);
+      bool extend_length = *commands & EXTEND_LENGTH;
+      uint32_t trbytes = cmd_xfer(jtag, commands, extend_length, no_read, output_buffer);
       commands += 1 + trbytes;
       output_buffer += (no_read ? 0 : trbytes);
       break;
@@ -227,84 +193,84 @@ uint32_t cmd_handle(pio_jtag_inst_t* jtag, uint8_t* rxbuf, uint32_t count, uint8
   return commands - rxbuf;
 }
 
-#define DECOMPRESSION_BUF_SZ 2048
-#define FAKE_TX_BUF_SZ       1024
-#define HANDLE_WATER         256
-#define HANDLE_MAX           128
-
 extern pio_jtag_inst_t jtag;
 
-uint8_t decompression_buf[DECOMPRESSION_BUF_SZ];
-uint8_t fake_tx_buf[FAKE_TX_BUF_SZ];
+static uint8_t decompressed_buf[128 * 1024];
 
-void replay_compressed_jtag_sequence(uint32_t cmd_buffer_sunk, uint8_t *cmd_buffer) {
-
-    if (cmd_buffer_sunk < 1000) {
-        return;
-    }
-
+static bool heatshrink_decompress(const uint8_t *compressed, uint32_t compressed_size,
+                                   uint8_t *output, uint32_t original_size) {
+    heatshrink_decoder hsd;
     heatshrink_decoder_reset(&hsd);
-    uint32_t compressed_size = cmd_buffer_sunk;
-    size_t sunk = 0;
-    size_t bytes_in_decomp = 0;
-    size_t bytes_total_decomp = 0;
-    size_t total_handled = 0;
-    bool abort = false;
-    while (sunk < compressed_size && !abort) {
 
-        // Read from saved command buffer
-        size_t scount = 0;
-        heatshrink_decoder_sink(&hsd, &cmd_buffer[sunk],
-                                compressed_size - sunk, &scount);
-        sunk += scount;
+    size_t sink_offset = 0;
+    size_t out_offset = 0;
 
-        if (sunk == compressed_size) {
-            heatshrink_decoder_finish(&hsd);
+    while (out_offset < original_size) {
+        if (sink_offset < compressed_size) {
+            size_t sunk = 0;
+            HSD_sink_res sres = heatshrink_decoder_sink(&hsd,
+                (uint8_t *)&compressed[sink_offset], compressed_size - sink_offset, &sunk);
+            if (sres < 0) return false;
+            sink_offset += sunk;
         }
 
-        // Decompress as much as we can from what we just sunk.
         HSD_poll_res pres;
         do {
-            size_t pcount = 0;
-            pres = heatshrink_decoder_poll(
-                &hsd, &decompression_buf[bytes_in_decomp],
-                DECOMPRESSION_BUF_SZ - bytes_in_decomp, &pcount);
-            bytes_in_decomp += pcount;
-            bytes_total_decomp += pcount;
+            size_t polled = 0;
+            pres = heatshrink_decoder_poll(&hsd,
+                &output[out_offset], original_size - out_offset, &polled);
+            if (pres < 0) return false;
+            out_offset += polled;
+            if (out_offset >= original_size) break;
         } while (pres == HSDR_POLL_MORE);
 
-        // If we have a lot of decompressed commands pending, handle them until it's less than HANDLE_WATER
-        while (bytes_in_decomp >= HANDLE_WATER) {
-            size_t n_handled = cmd_handle(&jtag, decompression_buf, HANDLE_MAX, fake_tx_buf, true);
-
-            if (n_handled > bytes_in_decomp) {
-                abort = true;
-                break;
-            }
-
-            // Can't rely on memcpy copy order!
-            for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
-                (decompression_buf)[i] = (decompression_buf + n_handled)[i];
-            }
-
-
-            bytes_in_decomp -= n_handled;
-            total_handled += n_handled;
+        if (sink_offset >= compressed_size && pres == HSDR_POLL_EMPTY) {
+            heatshrink_decoder_finish(&hsd);
         }
-
     }
 
-    while (bytes_in_decomp > 0 && !abort) {
-        size_t n_handled = cmd_handle(&jtag, &decompression_buf[0], bytes_in_decomp, fake_tx_buf, true);
+    return out_offset == original_size;
+}
 
-        for (int i = 0; i < (bytes_in_decomp - n_handled); i++) {
-            (decompression_buf)[i] = (decompression_buf + n_handled)[i];
-        }
-
-        bytes_in_decomp -= n_handled;
-        total_handled += n_handled;
-
+bool load_bitstream_by_number(pio_jtag_inst_t* jtag, uint32_t bitstream_number, uint32_t* device_id_out, uint32_t* status_out) {
+    if (bitstream_number >= bitstream_count) {
+        return false;
     }
+    const struct bitstream_info* bitstream = &bitstreams[bitstream_number];
+
+    jtag_set_clk_freq(jtag, 60000);
+
+    uint32_t device_id = ecp5_jtag_read_id();
+    if (device_id_out) {
+        *device_id_out = device_id;
+    }
+    bool device_found = false;
+    for (int i = 0; i < ecp_device_count; i++) {
+        if (ecp_devices[i].device_id == device_id) {
+            device_found = true;
+            break;
+        }
+    }
+    if (!device_found) {
+        return false;
+    }
+
+    if (bitstream->original_size > sizeof(decompressed_buf)) {
+        return false;
+    }
+
+    if (!heatshrink_decompress(bitstream->data, bitstream->compressed_size,
+                                decompressed_buf, bitstream->original_size)) {
+        return false;
+    }
+
+    ecp5_jtag_load_bitstream(decompressed_buf, bitstream->original_size);
+
+    uint32_t status = ecp5_jtag_read_status();
+    if (status_out) {
+        *status_out = status;
+    }
+    return true;
 }
 
 
@@ -318,9 +284,7 @@ static void cmd_freq(pio_jtag_inst_t* jtag, const uint8_t *commands) {
   jtag_set_clk_freq(jtag, (commands[1] << 8) | commands[2]);
 }
 
-//static uint8_t output_buffer[64];
-
-static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf) {
+uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool extend_length, bool no_read, uint8_t* tx_buf) {
   uint16_t transferred_bits;
   uint8_t* output_buffer = 0;
   transferred_bits = commands[1];
@@ -346,7 +310,7 @@ static uint32_t cmd_xfer(pio_jtag_inst_t* jtag, const uint8_t *commands, bool ex
   return (transferred_bits + 7) / 8;
 }
 
-static void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands) {
+void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands) {
   uint8_t signal_mask, signal_status;
 
   signal_mask = commands[1];
@@ -363,17 +327,9 @@ static void cmd_setsig(pio_jtag_inst_t* jtag, const uint8_t *commands) {
   if (signal_mask & SIG_TMS) {
     jtag_set_tms(jtag, signal_status & SIG_TMS);
   }
-  
-  if (signal_mask & SIG_TRST) {
-    jtag_set_trst(jtag, signal_status & SIG_TRST);
-  }
-
-  if (signal_mask & SIG_SRST) {
-    jtag_set_rst(jtag, signal_status & SIG_SRST);
-  }
 }
 
-static uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer)
+uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer)
 {
   uint8_t signal_status = 0;
   
@@ -384,7 +340,7 @@ static uint32_t cmd_getsig(pio_jtag_inst_t* jtag, uint8_t *buffer)
   return 1;
 }
 
-static uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer)
+uint32_t cmd_clk(pio_jtag_inst_t *jtag, const uint8_t *commands, bool readout, uint8_t *buffer)
 {
   uint8_t signals, clk_pulses;
   signals = commands[1];

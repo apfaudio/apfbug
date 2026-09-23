@@ -2,6 +2,11 @@
  * The MIT License (MIT)
  *
  * Copyright (c) 2021 Raspberry Pi (Trading) Ltd.
+ * Copyright (c) 2023 David Williams (davidthings)
+ * Copyright (c) 2023 luyi1888
+ * Copyright (c) 2024 DangerousPrototypes
+ * Copyright (c) 2024 DESKTOP-M9CCUTI\ian
+ * Copyright (c) 2024 Patrick Dussud
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -36,10 +41,9 @@
 #define TX_BUFFER_SIZE (4096) //needs to be a power of 2
 #define RX_BUFFER_SIZE (4096)
 
-
-
-#ifdef USB_CDC_UART_BRIDGE
-void cdc_uart_init( uart_inst_t *const uart, int uart_rx_pin, int uart_tx_pin );
+#if (CDC_UART_INTF_COUNT > 0)
+/* index is the CDC interface number */
+void cdc_uart_init( int index, uart_inst_t *const uart, int uart_rx_pin, int uart_tx_pin );
 void cdc_uart_task(void);
 #endif
 

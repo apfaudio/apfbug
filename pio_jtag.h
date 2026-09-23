@@ -11,12 +11,10 @@ typedef struct pio_jtag_inst {
     uint pin_tdo;
     uint pin_tck;
     uint pin_tms;
-    uint pin_rst;
-    uint pin_trst;
 } pio_jtag_inst_t;
 
 
-void init_jtag(pio_jtag_inst_t* jtag, uint freq, uint pin_tck, uint pin_tdi, uint pin_tdo, uint pin_tms, uint pin_rst, uint pin_trst);
+void init_jtag(pio_jtag_inst_t* jtag, uint freq, uint pin_tck, uint pin_tdi, uint pin_tdo, uint pin_tms);
 
 void pio_jtag_write_blocking(const pio_jtag_inst_t *jtag, const uint8_t *src, size_t len);
 
@@ -34,15 +32,6 @@ uint8_t jtag_strobe(const pio_jtag_inst_t *jtag, uint32_t length, bool tms, bool
 static inline void jtag_set_tms(const pio_jtag_inst_t *jtag, bool value)
 {
     gpio_put(jtag->pin_tms, value);
-}
-static inline void jtag_set_rst(const pio_jtag_inst_t *jtag, bool value)
-{
-    /* Change the direction to out to drive pin to 0 or to in to emulate open drain */
-    gpio_set_dir(jtag->pin_rst, !value);
-}
-static inline void jtag_set_trst(const pio_jtag_inst_t *jtag, bool value)
-{
-    gpio_put(jtag->pin_trst, value);
 }
 
 // The following APIs assume that they are called in the following order:
