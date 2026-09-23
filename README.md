@@ -14,12 +14,19 @@
 ## What has been added?
 
 `apfbug` includes the same features as `pico-dirtyjtag` (USB-JTAG and USB-UART bridge), with some additions:
-- UART traffic is inspected to look for keywords.
-- If a keyword is encountered e.g. `BITSTREAM1`, a compressed bitstream stored on the RP2040's SPI flash is decompressed and sent to the ECP5 over JTAG, using the ECP5's own configuration protocol.
+- An i2c target emulated by the RP2040 is written to by the ECP5 with a magic transaction to launch a bitstream reconfiguration.
+- On reconfiguration, a compressed bitstream stored on the RP2040's SPI flash is decompressed and sent to the ECP5 over JTAG, using the ECP5's own configuration protocol.
 
 ## Bitstream ROM
 
-ECP5 allows bitstreams to jump to arbitrary addresses - however it is not possible to issue a JTAG command to jump to an arbitrary address. So, we store N 'bootstub' bitsreams, each of which does nothing except A) reboot immediately to B) the target arbitrary address. Unfortunately these are 'normal' bitstreams, so they are quite large. To keep the bitstream switch time low, each 'bootstub' is compressed with heatshrink to about 10KiB each (yes this is much smaller than even a compressed bitstream from ecppack, so we are compressing twice!) - the double-compressed bitstream is stored in a generated `rom.c`. On bitstream selection, this bitstream is heatshrink-decompressed and sent over JTAG to the ECP5. The ECP5 is then decompressing the `ecppack`-compressed bitstream into a full-size bitstream. Interestingly, this whole process is much faster than sending non-compressed bitstreams straight from SPI flash via RP2040, as flash read speed is the bottleneck.
+ECP5 allows bitstreams to jump to arbitrary addresses - however it is not possible to issue a JTAG command to jump to an arbitrary address. So, we store N 'bootstub' bitsreams, each of which does nothing except:
+
+- A) reboot immediately to
+- B) the target arbitrary address.
+
+Unfortunately these are 'normal' bitstreams, so they are quite large. To keep the bitstream switch time low, each 'bootstub' is compressed with heatshrink to about 10KiB each (yes this is much smaller than even a compressed bitstream from ecppack, we are compressing twice!) - the double-compressed bitstream is stored in a generated `rom.c`.
+
+On bitstream selection, this bitstream is heatshrink-decompressed and sent over JTAG to the ECP5. The ECP5 is then decompressing the `ecppack`-compressed bitstream into a full-size bitstream. Interestingly, this whole process is much faster than sending non-compressed bitstreams straight from SPI flash via RP2040, as flash read speed is the bottleneck.
 
 In `bitstream/src/*.bit` you find the source bitstreams generated from the Tiliqua repository using `scripts/bootstubs.sh` - basically a set of commands like `pdm bootstub build --name=bootstub4 --bootaddr=0x400000`.
 
